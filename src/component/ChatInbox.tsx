@@ -33,7 +33,7 @@ const ChatInbox = ({
   };
 
   return (
-    <div className="w-[350px] h-[500px] bg-white rounded-[16px] shadow-md flex flex-col overflow-hidden z-[9999]">
+    <div className="w-[360px] h-[530px] bg-white rounded-[16px] shadow-md flex flex-col overflow-hidden z-[9999]">
       {/* Always show header */}
       <div className="flex-shrink-0">
         <Header agentName={agentName} setOpen={setOpen} />
@@ -43,8 +43,8 @@ const ChatInbox = ({
       <div className="flex-grow overflow-y-auto">
         {!showChat ? (
           <div className="flex flex-col justify-center items-center p-6">
-            <h3 className="text-lg font-semibold mb-1">Hello There!</h3>
-            <p className="text-xs text-gray-500 mb-4 text-center">
+            <h3 className="text-lg font-bold mb-1">Hello There!</h3>
+            <p className="text-xs text-gray-500 mb-10 text-center">
               Kindly fill in the form below to continue the conversation.
             </p>
 

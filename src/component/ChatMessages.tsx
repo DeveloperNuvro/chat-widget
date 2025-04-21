@@ -15,7 +15,7 @@ const ChatMessages = ({ messages }: { messages: { text: string; sender: 'user' |
           className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
         >
           <div
-            className={`px-4 py-2 max-w-[90%] text-sm whitespace-pre-line rounded-xl ${
+            className={`px-4 py-2 max-w-[80%] text-sm whitespace-pre-line break-words rounded-xl ${
               msg.sender === 'user'
                 ? 'bg-gradient-to-r from-[#5D17E9] to-[#8C52FF] text-white rounded-br-none'
                 : 'bg-[#F4EEFF] text-[#8C52FF] rounded-bl-none'

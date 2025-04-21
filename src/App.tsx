@@ -28,7 +28,7 @@ const App: React.FC = () => {
       <div
         id="chat-bubble"
         onClick={() => setOpen(prev => !prev)}
-        className='fixed bottom-4 right-4 w-12 h-12 bg-[#8C52FF] rounded-full flex items-center justify-center text-white text-3xl cursor-pointer z-[9999]'
+        className='fixed bottom-4 right-4 h-[60px] w-[60px] bg-[#8C52FF] rounded-full flex items-center justify-center text-white text-3xl cursor-pointer z-[9999]'
       >
         💬
       </div>
@@ -39,7 +39,7 @@ const App: React.FC = () => {
           style={{
             position: 'fixed',
             bottom: 90,
-            right: 20,
+            right: 10,
             zIndex: 9998,
           }}
         >
