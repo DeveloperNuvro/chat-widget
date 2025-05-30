@@ -57,7 +57,7 @@ const ChatInbox = ({
     if (businessId && agentName && showChat) {
 
       axios
-        .get(`http://localhost:5000/api/v1/business/${businessId}/${agentName}/default-responses`)
+        .get(`https://nuvro-dtao9.ondigitalocean.app/api/v1/business/${businessId}/${agentName}/default-responses`)
         .then(response => {
           const faqs = response.data.data.defaultFAQResponses;
           setDefaultResponses(faqs);
