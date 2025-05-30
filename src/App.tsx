@@ -3,24 +3,14 @@ import ChatInbox from './component/ChatInbox';
 
 const App: React.FC = () => {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<{ text: string; sender: 'user' | 'bot' }[]>([]);
   const [input, setInput] = useState('');
 
   const params = new URLSearchParams(window.location.search);
   const agentName = params.get('agentName') || 'AI Assistant';
+  const businessId = params.get('businessId') || '';
 
-  const sendMessage = () => {
-    if (!input.trim()) return;
-  
-    const userMessage = { text: input, sender: 'user' as const };
-    const botMessage = {
-      text: "Hey! Of course, I’d be happy to help.\nWhat do you need? 😊",
-      sender: 'bot' as const,
-    };
-  
-    setMessages(prev => [...prev, userMessage, botMessage]);
-    setInput('');
-  };
+
+
   
   return (
     <>
@@ -28,7 +18,7 @@ const App: React.FC = () => {
       <div
         id="chat-bubble"
         onClick={() => setOpen(prev => !prev)}
-        className='fixed bottom-4 right-4 h-[60px] w-[60px] bg-[#8C52FF] rounded-full flex items-center justify-center text-white text-3xl cursor-pointer z-[9999]'
+        className='fixed bottom-1 right-4 h-[50px] w-[50px] bg-[#8C52FF] rounded-full flex items-center justify-center text-white text-3xl cursor-pointer z-[9999]'
       >
         💬
       </div>
@@ -38,18 +28,18 @@ const App: React.FC = () => {
         <div
           style={{
             position: 'fixed',
-            bottom: 90,
+            bottom: 65,
             right: 10,
             zIndex: 9998,
           }}
         >
           <ChatInbox
             agentName={agentName}
+            businessId={businessId}
             setOpen={setOpen}
-            messages={messages}
             input={input}
             setInput={setInput}
-            sendMessage={sendMessage}
+  
           />
         </div>
       )}
