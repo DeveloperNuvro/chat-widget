@@ -1,9 +1,24 @@
-
 import { PiRobot } from "react-icons/pi";
-import { FaRegWindowMinimize } from "react-icons/fa";
+import { FaRegWindowMinimize, FaSyncAlt } from "react-icons/fa";
+import { useTranslation } from 'react-i18next'; // <-- NEW: Import hook
 
-const Header = ({ agentName, setOpen, isHuman, setIsHuman }: { agentName: string; setOpen: any; isHuman:boolean; setIsHuman:any }) => {
- 
+const Header = ({ 
+  agentName, 
+  setOpen, 
+  onReset 
+}: { 
+  agentName: string; 
+  setOpen: (isOpen: boolean) => void; 
+  isHuman: boolean; 
+  setIsHuman: (isHuman: boolean) => void;
+  onReset: () => void;
+}) => {
+  // <-- NEW: Get translation function (t) and i18n instance -->
+  const { t, i18n } = useTranslation();
+
+  const changeLanguage = (lng: 'en' | 'es') => {
+    i18n.changeLanguage(lng);
+  };
 
   return (
     <div className="w-full h-[60px] flex justify-between items-center rounded-t-[16px] p-4 shadow-[0px_2px_4px_0px_#8C52FF40] bg-gradient-to-r from-[#5D17E9] z-50 to-[#8C52FF]">
@@ -16,21 +31,38 @@ const Header = ({ agentName, setOpen, isHuman, setIsHuman }: { agentName: string
         <div className="text-white font-semibold tracking-normal text-center">
           {agentName}
         </div>
-
-        {/* Human Toggle Button */}
-        <button
-          onClick={() => setIsHuman((prev: boolean) => !prev)}
-          className={`ml-4 cursor-pointer px-4 py-1 rounded-full text-sm font-medium transition-all ${
-            isHuman ? "bg-white text-[#8C52FF]" : "bg-gray-300 text-gray-700"
-          }`}
-        >
-          Human {isHuman ? "On" : "Off"}
-        </button>
       </div>
 
-      <button className="text-white pb-2 cursor-pointer" onClick={() => setOpen(false)}>
-        <FaRegWindowMinimize />
-      </button>
+      <div className="flex items-center space-x-3">
+        {/* <-- MODIFIED: Language change Button --> */}
+        <div className="flex items-center bg-white px-2 py-1 rounded-md text-sm font-bold text-[#8C52FF] space-x-2">
+          <button 
+            onClick={() => changeLanguage('es')}
+            className={`cursor-pointer ${i18n.language === 'es' ? 'opacity-100' : 'opacity-50'}`}
+          >
+            SP
+          </button>
+          <div className="border-r border-gray-300 h-4"></div>
+          <button 
+            onClick={() => changeLanguage('en')}
+            className={`cursor-pointer ${i18n.language === 'en' ? 'opacity-100' : 'opacity-50'}`}
+          >
+            EN
+          </button>
+        </div>
+      
+        <button 
+          title={t('startNewConversation')} 
+          className="text-white cursor-pointer" 
+          onClick={onReset}
+        >
+          <FaSyncAlt />
+        </button>
+
+        <button className="text-white pb-2 cursor-pointer" onClick={() => setOpen(false)}>
+          <FaRegWindowMinimize />
+        </button>
+      </div>
     </div>
   );
 };

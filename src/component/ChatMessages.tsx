@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next'; // <-- NEW: Import hook
 
 const ChatMessages = ({ messages, isAgentTyping }: { messages: { text: string; sender: 'user' | 'bot' }[], isAgentTyping: boolean }) => {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const { t } = useTranslation(); // <-- NEW: Get translation function
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -25,16 +27,15 @@ const ChatMessages = ({ messages, isAgentTyping }: { messages: { text: string; s
         </div>
       ))}
 
-      {/* ✅ Show typing indicator once, aligned left (for bot/human) */}
       {isAgentTyping && (
         <div className="flex justify-start">
           <div className="self-start bg-[#8C52FF] rounded-md text-white text-left text-sm  italic px-3 mt-2">
-              Human agent is typing...
-            </div>
+              {/* <-- MODIFIED: Use the t() function --> */}
+              {t('agentTyping')}
+          </div>
         </div>
       )}
 
-      {/* Dummy div to auto-scroll */}
       <div ref={bottomRef} />
     </div>
   );

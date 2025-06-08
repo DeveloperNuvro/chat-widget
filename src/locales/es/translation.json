@@ -1,0 +1,10 @@
+{
+  "greeting": "¡Hola!",
+  "formInstruction": "Por favor, rellena el siguiente formulario para continuar la conversación.",
+  "namePlaceholder": "Nombre",
+  "phonePlaceholder": "Número de teléfono",
+  "emailPlaceholder": "Dirección de correo electrónico",
+  "continueButton": "Continuar",
+  "agentTyping": "El agente humano está escribiendo...",
+  "startNewConversation": "Empezar una nueva conversación"
+}
