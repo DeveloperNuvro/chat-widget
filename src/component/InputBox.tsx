@@ -2,6 +2,7 @@ import { GrEmoji } from 'react-icons/gr';
 import { FaPaperPlane } from 'react-icons/fa';
 import { useState } from 'react';
 import EmojiPicker from 'emoji-picker-react';
+import { useTranslation } from 'react-i18next'; // <-- 1. IMPORT hook
 
 const InputBox = ({
   input,
@@ -12,6 +13,7 @@ const InputBox = ({
   setInput: (val: string) => void;
   sendMessage: () => void;
 }) => {
+  const { t } = useTranslation(); // <-- 2. GET the t function
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const handleEmojiClick = (emojiData: any) => {
@@ -33,13 +35,13 @@ const InputBox = ({
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && sendMessage()}
           className="w-full h-full rounded-[8px] border-t-[1px] border-[#E6E6E6] outline-none px-3 py-2 pr-[60px]"
-          placeholder="Type a message..."
+          placeholder={t('inputPlaceholder')} // <-- 3. USE the t function for the placeholder
         />
 
         {/* Send Button */}
         <button
           onClick={sendMessage}
-          className="absolute right-10 cursor-pointer text-[#8C52FF] hover:text-[#703ccf] transition"
+          className="absolute right-10 cursor-pointer text-[#ff21b0] hover:text-[#ff21b0] transition"
         >
           <FaPaperPlane />
         </button>

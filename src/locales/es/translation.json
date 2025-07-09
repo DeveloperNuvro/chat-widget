@@ -2,9 +2,15 @@
   "greeting": "¡Hola!",
   "formInstruction": "Por favor, rellena el siguiente formulario para continuar la conversación.",
   "namePlaceholder": "Nombre",
-  "phonePlaceholder": "Número de teléfono",
+  "phonePlaceholder": "número de whatsapp",
   "emailPlaceholder": "Dirección de correo electrónico",
   "continueButton": "Continuar",
   "agentTyping": "El agente humano está escribiendo...",
-  "startNewConversation": "Empezar una nueva conversación"
+  "startNewConversation": "Empezar una nueva conversación",
+  "typingIndicator": "escribiendo...",
+  "inputPlaceholder": "Escribe un mensaje...",
+  "alert.fillAllFields": "Por favor, rellene todos los campos",
+  "error.nameRequired": "El nombre es obligatorio",
+  "error.invalidPhone": "Por favor, introduzca un número de teléfono válido",
+  "error.invalidEmail": "Por favor, introduzca una dirección de correo electrónico válida"
 }

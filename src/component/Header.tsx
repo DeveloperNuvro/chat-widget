@@ -9,8 +9,6 @@ const Header = ({
 }: { 
   agentName: string; 
   setOpen: (isOpen: boolean) => void; 
-  isHuman: boolean; 
-  setIsHuman: (isHuman: boolean) => void;
   onReset: () => void;
 }) => {
   // <-- NEW: Get translation function (t) and i18n instance -->
@@ -21,10 +19,10 @@ const Header = ({
   };
 
   return (
-    <div className="w-full h-[60px] flex justify-between items-center rounded-t-[16px] p-4 shadow-[0px_2px_4px_0px_#8C52FF40] bg-gradient-to-r from-[#5D17E9] z-50 to-[#8C52FF]">
+    <div className="w-full h-[60px] flex justify-between items-center rounded-t-[16px] p-4 shadow-[0px_2px_4px_0px_#8C52FF40] bg-gradient-to-r from-[#ff21b0] to-[#c24d99]">
       <div className="flex items-center">
         <div className="w-[40px] h-[40px] bg-white rounded-full mr-2 flex items-center justify-center">
-          <div className="text-[20px] text-[#8C52FF]">
+          <div className="text-[20px] text-[#ff21b0]">
             <PiRobot />
           </div>
         </div>
@@ -35,12 +33,12 @@ const Header = ({
 
       <div className="flex items-center space-x-3">
         {/* <-- MODIFIED: Language change Button --> */}
-        <div className="flex items-center bg-white px-2 py-1 rounded-md text-sm font-bold text-[#8C52FF] space-x-2">
+        <div className="flex items-center bg-white px-2 py-1 rounded-md text-sm font-bold text-[#ff21b0] space-x-2">
           <button 
             onClick={() => changeLanguage('es')}
             className={`cursor-pointer ${i18n.language === 'es' ? 'opacity-100' : 'opacity-50'}`}
           >
-            SP
+            ES
           </button>
           <div className="border-r border-gray-300 h-4"></div>
           <button 
