@@ -1,17 +1,17 @@
-// ChatInbox.tsx
+// ChatInbox.tsx (for the WIDGET)
 
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { io, Socket } from 'socket.io-client';
-import axios, { AxiosError } from 'axios';
+import axios from 'axios';
 import { z } from 'zod';
+import toast from 'react-hot-toast';
 
 import ChatMessages from './ChatMessages';
 import DefaultResponseTemplete from './DefaultResponseTemplate';
 import Header from './Header';
 import InputBox from './InputBox';
 import { useLocalStorage } from './useLocalStorage';
-import toast from 'react-hot-toast';
 
 const API_BASE_URL = 'https://nuvro-dtao9.ondigitalocean.app';
 const socket: Socket = io(API_BASE_URL, {
@@ -21,7 +21,7 @@ const socket: Socket = io(API_BASE_URL, {
 
 interface Message {
   text: string;
-  sender: 'user' | 'bot';
+  sender: 'user' | 'bot'; // 'bot' will now represent both AI and Human agents
   isTypingIndicator?: boolean;
   type?: 'loader' | 'text';
 }
@@ -59,19 +59,13 @@ const ChatInbox = ({
 
   const localStorageKey = `chat_state_${businessId}_${agentName}`;
   const [chatState, setChatState] = useLocalStorage<ChatState>(localStorageKey, initialChatState);
+  const { showChat, name, phone, email, messages, customerId } = chatState;
 
   const [input, setInput] = useState('');
   const [isAgentTyping, setIsAgentTyping] = useState(false);
   const [defaultResponses, setDefaultResponses] = useState<{ question: string; answer: string }[]>([]);
   const [errors, setErrors] = useState<FormErrors>({});
-
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { showChat, name, phone, email, messages, customerId } = chatState;
-
-  // --- THE FIX: PART 1 ---
-  // Create a ref to hold a stable reference to our message handler.
-  const handleNewMessageRef = useRef<((data: any) => void) | null>(null);
-
 
   const formSchema = z.object({
     name: z.string().min(1, { message: t('error.nameRequired') }),
@@ -81,9 +75,123 @@ const ChatInbox = ({
     email: z.string().email({ message: t('error.invalidEmail') }),
   });
 
+  const customerIdRef = useRef(customerId);
+  useEffect(() => {
+    customerIdRef.current = customerId;
+  }, [customerId]);
+
+
+  useEffect(() => {
+    if (!customerId) {
+      return;
+    }
+    socket.emit("joinCustomerRoom", customerId);
+
+    const handleNewMessage = (data: { sender: 'user' | 'agent'; message: string; customerId?: string }) => {
+
+      if (data.customerId !== customerId) return;
+      console.log("New message received:", data);
+
+      if (data.sender === 'agent') {
+        setIsAgentTyping(false);
+        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+
+        setChatState(prev => {
+          const messagesWithoutLoader = prev.messages.filter(m => m.type !== 'loader');
+          const agentMessage: Message = { text: data.message, sender: 'bot' };
+          return { ...prev, messages: [...messagesWithoutLoader, agentMessage] };
+        });
+      }
+
+    };
+
+    const handleTyping = () => {
+      setIsAgentTyping(true);
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+     
+      typingTimerRef.current = setTimeout(() => setIsAgentTyping(false), 4000); 
+    };
+
+    socket.on('newMessage', handleNewMessage);
+    socket.on("typing", handleTyping);
+
+    return () => {
+      socket.off('newMessage', handleNewMessage);
+      socket.off('typing', handleTyping);
+    };
+  }, [customerId, setChatState]);
+
+
+  useEffect(() => {
+    if (customerId) {
+      socket.emit("joinCustomerRoom", customerId);
+      console.log(`Socket emitted joinCustomerRoom for: ${customerId}`);
+    }
+  }, [customerId]);
+
+  const startChatSession = async () => {
+    const result = formSchema.safeParse({ name, phone, email });
+    if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+      setErrors({
+        name: fieldErrors.name?.[0],
+        phone: fieldErrors.phone?.[0],
+        email: fieldErrors.email?.[0],
+      });
+      return;
+    }
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/api/v1/messages/create-chat-session`, {
+        name, email, phone, businessId,
+      });
+
+      const newCustomerId = response.data.data.customerId;
+      setErrors({});
+      setChatState(prev => ({ ...prev, customerId: newCustomerId, showChat: true }));
+    } catch (error) {
+      toast.error("Could not start chat session.");
+      console.error("Error starting chat session:", error);
+    }
+  };
+
+  // --- sendMessage FUNCTION (MODIFIED FOR OPTIMISTIC UI) ---
+  const sendMessage = async (messageToSend?: string) => {
+    const text = (messageToSend || input).trim();
+    if (!text || !businessId || !customerId) return;
+
+    // Optimistically add the user's message AND the loader instantly
+    const userMessage: Message = { text, sender: 'user' };
+    const botLoaderMessage: Message = { text: '', sender: 'bot', type: 'loader' };
+
+    setChatState(prev => ({
+      ...prev,
+      messages: [...prev.messages, userMessage, botLoaderMessage],
+    }));
+    setInput(''); // Clear the input box immediately
+
+    try {
+      // The API call now just triggers the backend process.
+      // We don't need to wait for its response to update the UI anymore.
+      await axios.post(`${API_BASE_URL}/api/v1/messages/send`, {
+        message: text,
+        businessId,
+        customerId,
+        agentName,
+      });
+    } catch (error) {
+      toast.error('Failed to send message.');
+      // If the API call fails, remove the user message and the loader to rollback
+      setChatState(prev => ({
+        ...prev,
+        messages: prev.messages.filter(m => m !== userMessage && m !== botLoaderMessage),
+      }));
+      setInput(text); // Put the text back in the input box
+    }
+  };
+
+  // No changes needed for resetChat, handleDefaultResponseClick, or the form part of the component
   const resetChat = () => {
-    socket.disconnect();
-    socket.connect();
     localStorage.removeItem(localStorageKey);
     setChatState(initialChatState);
     setInput('');
@@ -92,64 +200,10 @@ const ChatInbox = ({
     setOpen(false);
   };
 
-  const handleContinue = () => {
-    const result = formSchema.safeParse({ name, phone, email });
-    if (result.success) {
-      setErrors({});
-      setChatState(prev => ({ ...prev, showChat: true }));
-    } else {
-      const fieldErrors = result.error.flatten().fieldErrors;
-      setErrors({
-        name: fieldErrors.name?.[0],
-        phone: fieldErrors.phone?.[0],
-        email: fieldErrors.email?.[0],
-      });
-    }
-  };
-
-  const sendMessage = async (messageToSend?: string) => {
-    const text = (messageToSend || input).trim();
-    if (!text || !businessId) return;
-
-    const userMessage: Message = { text, sender: 'user' };
-    const botLoaderMessage: Message = { text: '', sender: 'bot', type: 'loader' };
-
-    setChatState(prev => ({
-      ...prev,
-      messages: [...prev.messages, userMessage, botLoaderMessage],
-    }));
-    setInput('');
-
-    try {
-      const response = await axios.post(`${API_BASE_URL}/api/v1/messages/send`, {
-        message: text,
-        businessId,
-        customerId,
-        name,
-        email,
-        phone,
-        agentName,
-      });
-      console.log('Message sent successfully:', response);
-      if (response.data.data.customerId && !customerId) {
-        setChatState(prev => ({ ...prev, customerId: response.data.data.customerId }));
-      }
-    } catch (error) {
-
-      const axiosError = error as AxiosError<{ message: string }>;
-      const errorMessage = axiosError.response?.data?.message || 'Failed to send message. Please try again.';
-      toast.error(errorMessage);
-
-      setChatState(prev => ({
-        ...prev,
-        messages: prev.messages.filter(m => m.text !== text && m.type !== 'loader'),
-      }));
-    }
-  };
-
   const handleDefaultResponseClick = (question: string, answer: string) => {
-    const userMessage: Message = { text: question, sender: 'user' };
-    const botMessage: Message = { text: answer, sender: 'bot' };
+    const userMessage: Message = { text: question, sender: 'user', type: 'text' };
+    const botMessage: Message = { text: answer, sender: 'bot', type: 'text' };
+
     setChatState(prev => ({
       ...prev,
       messages: [...prev.messages, userMessage, botMessage]
@@ -158,95 +212,21 @@ const ChatInbox = ({
 
   useEffect(() => {
     if (businessId && agentName && showChat) {
-      axios
-        .get(`${API_BASE_URL}/api/v1/business/${businessId}/${agentName}/default-responses`)
-        .then(response => {
-          if (response.data?.data?.defaultFAQResponses) {
-            setDefaultResponses(response.data.data.defaultFAQResponses);
-          } else {
-            setDefaultResponses([]);
-          }
-        })
-        .catch(err => {
-          console.error('Error fetching default responses:', err);
-          setDefaultResponses([]);
-        });
+      axios.get(`${API_BASE_URL}/api/v1/business/${businessId}/${agentName}/default-responses`)
+        .then(response => setDefaultResponses(response.data?.data?.defaultFAQResponses || []))
+        .catch(err => console.error('Error fetching default responses:', err));
     }
   }, [showChat, businessId, agentName]);
 
 
-  
-  useEffect(() => {
-    handleNewMessageRef.current = (data: { sender: 'agent' | 'user'; message: string; customerId?: string }) => {
-     
-      if (data.customerId !== customerId) {
-        return;
-      }
-
-      if (data.sender === 'agent') {
-        setIsAgentTyping(false);
-        if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-
-        setChatState(prev => {
-          const messagesWithoutLoader = prev.messages.filter(m => m.type !== 'loader');
-
-          // if (messagesWithoutLoader.some(m => m.text === data.message && m.sender === 'bot')) {
-          //   return { ...prev, messages: messagesWithoutLoader };
-          // }
-          return {
-            ...prev,
-            messages: [...messagesWithoutLoader, { text: data.message, sender: 'bot', type: 'text' }]
-          };
-        });
-      }
-    };
-  }); 
-
-
-  useEffect(() => {
-   
-    if (customerId) {
-      socket.emit("joinCustomerRoom", customerId);
-    }
-
-  
-    const messageHandlerWrapper = (data: any) => {
-      if (handleNewMessageRef.current) {
-        handleNewMessageRef.current(data);
-      }
-    };
-
-    const handleTyping = () => {
-      setIsAgentTyping(true);
-      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-      typingTimerRef.current = setTimeout(() => setIsAgentTyping(false), 4000);
-    };
-
-   
-    socket.on('newMessage', messageHandlerWrapper);
-    socket.on("typing", handleTyping);
-
-  
-    return () => {
-      socket.off('newMessage', messageHandlerWrapper);
-      socket.off('typing', handleTyping);
-      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-    };
-    
-  }, [customerId]);
-
   return (
-    <div className="w-[360px] h-[530px] bg-white rounded-[16px] shadow-md flex flex-col overflow-hidden z-[9999]">
+    <div className="w-full h-full bg-white rounded-[16px] shadow-md flex flex-col overflow-hidden">
       <div className="flex-shrink-0">
-        <Header
-          agentName={agentName}
-          setOpen={setOpen}
-          onReset={resetChat}
-        />
+        <Header agentName={agentName} setOpen={setOpen} onReset={resetChat} />
       </div>
       <div className="flex-grow overflow-y-auto">
         {!showChat ? (
-          <div className="flex flex-col justify-center items-center p-6">
+          <div className="flex flex-col justify-center items-center p-6 h-full">
             <h3 className="text-lg font-bold mb-1">{t('greeting')}</h3>
             <p className="text-xs text-gray-500 mb-6 text-center">{t('formInstruction')}</p>
             <div className="w-full mb-3">
@@ -283,7 +263,7 @@ const ChatInbox = ({
               {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
             </div>
             <button
-              onClick={handleContinue}
+              onClick={startChatSession}
               className="w-full bg-[#ff21b0] cursor-pointer text-white py-2 rounded-md font-medium hover:bg-[#f18cce] transition"
             >
               {t('continueButton')}
@@ -294,7 +274,7 @@ const ChatInbox = ({
             <ChatMessages messages={messages} isAgentTyping={isAgentTyping} />
             <DefaultResponseTemplete
               defaultResponses={defaultResponses}
-              onSelect={handleDefaultResponseClick}
+              onSelect={(q, a) => handleDefaultResponseClick(q, a)}
             />
             <InputBox
               input={input}

@@ -52,3 +52,7 @@ body {
     transform: scale(1.0);
   }
 }
+
+#root { /* Or .App, or body, or whatever your main wrapper is */
+  pointer-events: auto; /* ✅ This is the fix. It re-enables clicks for the app itself. */
+}
