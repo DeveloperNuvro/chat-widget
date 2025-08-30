@@ -13,6 +13,15 @@ import { publicApi } from '../api/axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
+// Note: Ensure your `ChatMessages.tsx` component is updated to render 'system' messages
+// and that the Message interface includes 'system'.
+// export interface Message {
+//   text: string;
+//   sender: 'user' | 'bot' | 'system';
+//   type: 'text' | 'loader';
+// }
+
+
 interface ChatState {
   showChat: boolean;
   name: string;
@@ -59,7 +68,9 @@ const ChatInbox = ({
   const [socket, setSocket] = useState<Socket | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [defaultResponses, setDefaultResponses] = useState<{ question: string; answer: string }[]>([]);
-  const [agentName, setAgentName] = useState<string>(initialAgentName?.toString() ?? currentAgentName?.toString() ?? '');
+  
+  // Use a separate state for the header's agent name to avoid re-renders
+  const [headerAgentName, setHeaderAgentName] = useState<string>(initialAgentName?.toString() ?? currentAgentName?.toString() ?? '');
 
   const customerIdRef = useRef(customerId);
   useEffect(() => { customerIdRef.current = customerId; }, [customerId]);
@@ -76,34 +87,31 @@ const ChatInbox = ({
     setInput('');
     setDefaultResponses([]);
     setErrors({});
-    setOpen(false);
-  }, [localStorageKey, setChatState, setOpen]);
+  }, [localStorageKey, setChatState]);
 
-  // --- NEW: Automatically close the widget when the conversation is closed ---
   useEffect(() => {
     if (conversationStatus === 'closed') {
-      // We add a small delay so the user has time to read the final message.
+
       const closeTimer = setTimeout(() => {
         setOpen(false);
-        // Optionally, you could also call resetChat() here if you want the state
-        // to be completely fresh the next time the user opens the widget.
-        // resetChat(); 
-      }, 3000); // Close after 3 seconds
+       
+        setTimeout(() => {
+            resetChat();
+        }, 500); 
+      }, 3000);
 
-      // Cleanup the timer if the component unmounts for any other reason
       return () => clearTimeout(closeTimer);
     }
-  }, [conversationStatus, setOpen]);
-
+  }, [conversationStatus, setOpen, resetChat, setChatState]);
 
   useEffect(() => {
     if (customerId && conversationId && messages.length === 0) {
       publicApi.get(`/api/v1/customer/widget/messages/${customerId}`)
         .then(res => {
-          if (res.data && res.data.data && Array.isArray(res.data.data.data)) {
+          if (res.data?.data?.data && Array.isArray(res.data.data.data)) {
             const formattedMessages: Message[] = res.data.data.data.map((msg: any) => ({
               text: msg.message,
-              sender: msg.sender === 'customer' ? 'user' : 'bot',
+              sender: msg.sender === 'customer' ? 'user' : (msg.sender === 'system' ? 'system' : 'bot'),
               type: 'text',
             })).reverse();
             setChatState(prev => ({ ...prev, messages: formattedMessages, showChat: true }));
@@ -116,11 +124,9 @@ const ChatInbox = ({
   useEffect(() => {
     const newSocket = io(API_BASE_URL, { transports: ['websocket'], withCredentials: true });
     setSocket(newSocket);
-
     if (customerId) {
       newSocket.emit('joinCustomerRoom', customerId);
     }
-
     return () => { newSocket.disconnect(); };
   }, [customerId]);
 
@@ -128,40 +134,43 @@ const ChatInbox = ({
     if (!socket) return;
 
     const handleNewMessage = (payload: any) => {
+      // Ignore echoes of messages the user sent themselves
       if (payload.sender === 'customer') {
         return;
       }
       
-      if(payload.sender === 'agent' && payload.agentName) {
-        setAgentName(payload.agentName);
+      // Update the agent name in the header if a human agent sends a message
+      if (payload.sender === 'agent' && payload.agentName) {
+        setHeaderAgentName(payload.agentName);
       }
+      
+      // Determine the correct sender type for the UI
+      const senderType: Message['sender'] = payload.sender === 'system' ? 'system' : 'bot';
 
       const newMessage: Message = {
         text: payload.message,
-        sender: 'bot',
+        sender: senderType,
         type: 'text',
       };
 
       setChatState(prev => {
-        const reversedMessages = [...prev.messages].reverse();
-        const reversedLoaderIndex = reversedMessages.findIndex(m => m.type === 'loader');
-        const loaderIndex = reversedLoaderIndex !== -1
-          ? (prev.messages.length - 1) - reversedLoaderIndex
-          : -1;
+        // Find and replace the loader message if it exists
+        const loaderIndex = prev.messages.findIndex(m => m.type === 'loader');
 
         if (loaderIndex !== -1) {
           const updatedMessages = [...prev.messages];
           updatedMessages[loaderIndex] = newMessage;
           return { ...prev, messages: updatedMessages };
         } else {
+          // Otherwise, just append the new message
           return { ...prev, messages: [...prev.messages, newMessage] };
         }
       });
     };
 
-
     const handleConversationUpdate = (payload: { status: 'live' | 'closed'; agentName?: string }) => {
       toast.success(`You are now connected with ${payload.agentName}`);
+      setHeaderAgentName(payload.agentName || initialAgentName);
       setChatState(prev => ({
         ...prev,
         conversationStatus: payload.status,
@@ -171,14 +180,11 @@ const ChatInbox = ({
 
     const handleConversationClosed = (payload: { conversationId: string; closedBy: 'system' | 'agent' }) => {
       console.log(`Conversation closed by ${payload.closedBy}.`);
-      setChatState(prev => ({
-        ...prev,
-        conversationStatus: 'closed',
-      }));
+      setChatState(prev => ({ ...prev, conversationStatus: 'closed' }));
     };
 
     socket.on('newMessage', handleNewMessage);
-    socket.on('conversationUpdated', handleConversationUpdate); 
+    socket.on('conversationUpdated', handleConversationUpdate);
     socket.on('agentTyping', () => setIsAgentTyping(true));
     socket.on('agentStoppedTyping', () => setIsAgentTyping(false));
     socket.on('conversationClosedBySystem', handleConversationClosed);
@@ -186,13 +192,13 @@ const ChatInbox = ({
 
     return () => {
       socket.off('newMessage', handleNewMessage);
-      socket.off('conversationUpdated', handleConversationUpdate); 
+      socket.off('conversationUpdated', handleConversationUpdate);
       socket.off('agentTyping');
       socket.off('agentStoppedTyping');
       socket.off('conversationClosedBySystem', handleConversationClosed);
       socket.off('conversationClosedByAgent', handleConversationClosed);
     };
-  }, [socket, setChatState]);
+  }, [socket, setChatState, initialAgentName]);
   
   const startChatSession = async () => {
     const result = formSchema.safeParse({ name, phone, email });
@@ -217,11 +223,13 @@ const ChatInbox = ({
     if (!text || !businessId || !customerId) return;
 
     const userMessage: Message = { text, sender: 'user', type: 'text' };
-    const messagesWithUser = [...messages, userMessage];
+    let finalMessages: Message[] = [...messages, userMessage];
     
-    const finalMessages: Message[] = conversationStatus === 'ai_only' 
-      ? [...messagesWithUser, { text: '', sender: 'bot', type: 'loader' }]
-      : messagesWithUser;
+    // --- CONDITIONALLY ADD LOADER ---
+    // Only add the loader if the conversation is currently handled by AI.
+    if (conversationStatus === 'ai_only') {
+      finalMessages.push({ text: '', sender: 'bot', type: 'loader' });
+    }
       
     setChatState(prev => ({ ...prev, messages: finalMessages }));
     setInput('');
@@ -235,7 +243,11 @@ const ChatInbox = ({
       });
     } catch (error) {
       toast.error('Failed to send message.');
-      setChatState(prev => ({ ...prev, messages: prev.messages.filter(m => m !== userMessage && m.type !== 'loader') }));
+      // Rollback UI on error
+      setChatState(prev => ({ 
+        ...prev, 
+        messages: prev.messages.filter(m => m.type !== 'loader' && m !== userMessage) 
+      }));
       setInput(text);
     }
   };
@@ -257,7 +269,7 @@ const ChatInbox = ({
   return (
     <div className="w-full h-full bg-white rounded-[16px] shadow-md flex flex-col overflow-hidden">
       <div className="flex-shrink-0">
-        <Header agentName={agentName} setOpen={setOpen} onReset={resetChat} />
+        <Header agentName={headerAgentName} setOpen={setOpen} onReset={resetChat} />
       </div>
       <div className="flex-grow overflow-y-auto">
         {!showChat ? (
@@ -282,8 +294,8 @@ const ChatInbox = ({
           </div>
         ) : (
           <>
-            <ChatMessages messages={messages} isAgentTyping={isAgentTyping && conversationStatus === 'live'} />
-            {conversationStatus === 'ai_only' && defaultResponses.length > 0 && messages.length < 2 && (
+            <ChatMessages messages={messages} isAgentTyping={isAgentTyping} />
+            { (
               <DefaultResponseTemplate
                 defaultResponses={defaultResponses}
                 onSelect={handleDefaultResponseClick}
