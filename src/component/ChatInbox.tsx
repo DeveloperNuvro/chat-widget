@@ -1,3 +1,5 @@
+// ChatInbox.tsx
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { io, Socket } from 'socket.io-client';
@@ -13,15 +15,6 @@ import { publicApi } from '../api/axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
-// Note: Ensure your `ChatMessages.tsx` component is updated to render 'system' messages
-// and that the Message interface includes 'system'.
-// export interface Message {
-//   text: string;
-//   sender: 'user' | 'bot' | 'system';
-//   type: 'text' | 'loader';
-// }
-
-
 interface ChatState {
   showChat: boolean;
   name: string;
@@ -35,6 +28,7 @@ interface ChatState {
 }
 
 type FormErrors = Partial<Record<'name' | 'phone' | 'email', string>>;
+
 
 const ChatInbox = ({
   agentName: initialAgentName,
@@ -64,12 +58,11 @@ const ChatInbox = ({
   const { showChat, name, phone, email, messages, customerId, conversationId, conversationStatus, currentAgentName } = chatState;
 
   const [input, setInput] = useState('');
-  const [isAgentTyping, setIsAgentTyping] = useState(false);
+  const [isAgentTyping, setIsAgentTyping] = useState(false); // This is ONLY for human agents
   const [socket, setSocket] = useState<Socket | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
   const [defaultResponses, setDefaultResponses] = useState<{ question: string; answer: string }[]>([]);
   
-  // Use a separate state for the header's agent name to avoid re-renders
   const [headerAgentName, setHeaderAgentName] = useState<string>(initialAgentName?.toString() ?? currentAgentName?.toString() ?? '');
 
   const customerIdRef = useRef(customerId);
@@ -91,18 +84,13 @@ const ChatInbox = ({
 
   useEffect(() => {
     if (conversationStatus === 'closed') {
-
       const closeTimer = setTimeout(() => {
         setOpen(false);
-       
-        setTimeout(() => {
-            resetChat();
-        }, 500); 
+        setTimeout(() => { resetChat(); }, 500); 
       }, 3000);
-
       return () => clearTimeout(closeTimer);
     }
-  }, [conversationStatus, setOpen, resetChat, setChatState]);
+  }, [conversationStatus, setOpen, resetChat]);
 
   useEffect(() => {
     if (customerId && conversationId && messages.length === 0) {
@@ -130,52 +118,53 @@ const ChatInbox = ({
     return () => { newSocket.disconnect(); };
   }, [customerId]);
 
+
   useEffect(() => {
     if (!socket) return;
 
     const handleNewMessage = (payload: any) => {
-      // Ignore echoes of messages the user sent themselves
-      if (payload.sender === 'customer') {
-        return;
-      }
+      if (payload.sender === 'customer') { return; }
       
-      // Update the agent name in the header if a human agent sends a message
       if (payload.sender === 'agent' && payload.agentName) {
         setHeaderAgentName(payload.agentName);
       }
       
-      // Determine the correct sender type for the UI
       const senderType: Message['sender'] = payload.sender === 'system' ? 'system' : 'bot';
-
-      const newMessage: Message = {
-        text: payload.message,
-        sender: senderType,
-        type: 'text',
-      };
+      const newMessage: Message = { text: payload.message, sender: senderType, type: 'text' };
 
       setChatState(prev => {
-        // Find and replace the loader message if it exists
-        const loaderIndex = prev.messages.findIndex(m => m.type === 'loader');
-
-        if (loaderIndex !== -1) {
-          const updatedMessages = [...prev.messages];
-          updatedMessages[loaderIndex] = newMessage;
-          return { ...prev, messages: updatedMessages };
-        } else {
-          // Otherwise, just append the new message
-          return { ...prev, messages: [...prev.messages, newMessage] };
-        }
+        // This correctly replaces the AI loader with the AI's response
+        const messagesWithoutLoader = prev.messages.filter(m => m.type !== 'loader');
+        return { ...prev, messages: [...messagesWithoutLoader, newMessage] };
       });
     };
 
-    const handleConversationUpdate = (payload: { status: 'live' | 'closed'; agentName?: string }) => {
-      toast.success(`You are now connected with ${payload.agentName}`);
+    const handleConversationUpdate = (payload: { status: 'live' | 'closed' | 'ticket'; agentName?: string }) => {
+      if(payload.status === 'live' && payload.agentName) {
+        toast.success(`You are now connected with ${payload.agentName}`);
+      }
+      
       setHeaderAgentName(payload.agentName || initialAgentName);
+
       setChatState(prev => ({
         ...prev,
+        // This correctly removes any lingering AI loader when a human takes over
+        messages: prev.messages.filter(m => m.type !== 'loader'),
         conversationStatus: payload.status,
         currentAgentName: payload.agentName || prev.currentAgentName,
       }));
+    };
+    
+    // This handler is ONLY for the HUMAN agent's typing indicator
+    const handleAgentTyping = () => {
+      if (conversationStatus === 'live') {
+        setIsAgentTyping(true);
+      }
+    };
+    
+    // This handler is ONLY for the HUMAN agent's typing indicator
+    const handleAgentStoppedTyping = () => {
+      setIsAgentTyping(false);
     };
 
     const handleConversationClosed = (payload: { conversationId: string; closedBy: 'system' | 'agent' }) => {
@@ -185,20 +174,20 @@ const ChatInbox = ({
 
     socket.on('newMessage', handleNewMessage);
     socket.on('conversationUpdated', handleConversationUpdate);
-    socket.on('agentTyping', () => setIsAgentTyping(true));
-    socket.on('agentStoppedTyping', () => setIsAgentTyping(false));
+    socket.on('agentTyping', handleAgentTyping);
+    socket.on('agentStoppedTyping', handleAgentStoppedTyping);
     socket.on('conversationClosedBySystem', handleConversationClosed);
     socket.on('conversationClosedByAgent', handleConversationClosed);
 
     return () => {
       socket.off('newMessage', handleNewMessage);
       socket.off('conversationUpdated', handleConversationUpdate);
-      socket.off('agentTyping');
-      socket.off('agentStoppedTyping');
+      socket.off('agentTyping', handleAgentTyping);
+      socket.off('agentStoppedTyping', handleAgentStoppedTyping);
       socket.off('conversationClosedBySystem', handleConversationClosed);
       socket.off('conversationClosedByAgent', handleConversationClosed);
     };
-  }, [socket, setChatState, initialAgentName]);
+  }, [socket, setChatState, initialAgentName, conversationStatus]); // Important: conversationStatus is a dependency
   
   const startChatSession = async () => {
     const result = formSchema.safeParse({ name, phone, email });
@@ -225,11 +214,12 @@ const ChatInbox = ({
     const userMessage: Message = { text, sender: 'user', type: 'text' };
     let finalMessages: Message[] = [...messages, userMessage];
     
-    // --- CONDITIONALLY ADD LOADER ---
-    // Only add the loader if the conversation is currently handled by AI.
-    if (conversationStatus === 'ai_only') {
-      finalMessages.push({ text: '', sender: 'bot', type: 'loader' });
-    }
+    // // CRITICAL: Show the AI thinking loader ONLY when the conversation is in 'ai_only' mode.
+    // // When a human agent is connected (status is 'live' or 'ticket'), this block is skipped,
+    // // and no loader is displayed for user messages.
+    // if (conversationStatus === 'ai_only') {
+    //   finalMessages.push({ text: '', sender: 'bot', type: 'loader' });
+    // }
       
     setChatState(prev => ({ ...prev, messages: finalMessages }));
     setInput('');
@@ -243,7 +233,6 @@ const ChatInbox = ({
       });
     } catch (error) {
       toast.error('Failed to send message.');
-      // Rollback UI on error
       setChatState(prev => ({ 
         ...prev, 
         messages: prev.messages.filter(m => m.type !== 'loader' && m !== userMessage) 
@@ -295,12 +284,10 @@ const ChatInbox = ({
         ) : (
           <>
             <ChatMessages messages={messages} isAgentTyping={isAgentTyping} />
-            { (
-              <DefaultResponseTemplate
-                defaultResponses={defaultResponses}
-                onSelect={handleDefaultResponseClick}
-              />
-            )}
+            <DefaultResponseTemplate
+              defaultResponses={defaultResponses}
+              onSelect={handleDefaultResponseClick}
+            />
             <InputBox
               input={input}
               setInput={setInput}
