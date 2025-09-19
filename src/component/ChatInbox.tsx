@@ -214,12 +214,12 @@ const ChatInbox = ({
     const userMessage: Message = { text, sender: 'user', type: 'text' };
     let finalMessages: Message[] = [...messages, userMessage];
     
-    // // CRITICAL: Show the AI thinking loader ONLY when the conversation is in 'ai_only' mode.
-    // // When a human agent is connected (status is 'live' or 'ticket'), this block is skipped,
-    // // and no loader is displayed for user messages.
-    // if (conversationStatus === 'ai_only') {
-    //   finalMessages.push({ text: '', sender: 'bot', type: 'loader' });
-    // }
+    // CRITICAL: Show the AI thinking loader ONLY when the conversation is in 'ai_only' mode.
+    // When a human agent is connected (status is 'live' or 'ticket'), this block is skipped,
+    // and no loader is displayed for user messages.
+    if (conversationStatus === 'ai_only') {
+      finalMessages.push({ text: '', sender: 'bot', type: 'loader' });
+    }
       
     setChatState(prev => ({ ...prev, messages: finalMessages }));
     setInput('');
