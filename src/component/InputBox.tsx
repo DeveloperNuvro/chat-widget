@@ -32,22 +32,25 @@ const InputBox = ({ input, setInput, sendMessage, disabled = false }: InputBoxPr
           type="text"
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !disabled && sendMessage()}
-          className="w-full h-full rounded-[8px] border-t-[1px] border-[#E6E6E6] outline-none px-3 py-2 pr-[60px]"
+          onKeyDown={e => e.key === 'Enter' && !disabled && input.trim() && sendMessage()}
+          className="w-full h-full rounded-[8px] border border-gray-200 outline-none px-3 py-2 pr-[60px] focus:border-[#ff21b0] focus:ring-2 focus:ring-[#ff21b0]/20 transition-all"
           placeholder={t('inputPlaceholder')}
           disabled={disabled}
+          maxLength={1000}
         />
         <button
           onClick={sendMessage}
           disabled={disabled || !input.trim()}
-          className="absolute right-10 cursor-pointer text-[#ff21b0] hover:text-[#ff21b0] transition disabled:text-gray-400 disabled:cursor-not-allowed"
+          className="absolute right-10 cursor-pointer text-[#ff21b0] hover:text-[#c24d99] transition-all disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:text-gray-400 p-1.5 rounded-full hover:bg-[#ff21b0]/10"
+          title="Send message"
         >
           <FaPaperPlane />
         </button>
         <button
-          className="absolute right-2 text-gray-500 cursor-pointer"
+          className="absolute right-2 text-gray-500 cursor-pointer hover:text-[#ff21b0] transition-colors p-1.5 rounded-full hover:bg-gray-100"
           onClick={() => setShowEmojiPicker(prev => !prev)}
           disabled={disabled}
+          title="Add emoji"
         >
           <GrEmoji />
         </button>

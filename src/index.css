@@ -53,6 +53,43 @@ body {
   }
 }
 
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
 #root { /* Or .App, or body, or whatever your main wrapper is */
   pointer-events: auto; /* ✅ This is the fix. It re-enables clicks for the app itself. */
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Better focus styles */
+input:focus {
+  outline: 2px solid #ff21b0;
+  outline-offset: 2px;
+}
+
+/* Button hover effects */
+button:not(:disabled):hover {
+  transform: scale(1.05);
+  transition: transform 0.2s ease;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
