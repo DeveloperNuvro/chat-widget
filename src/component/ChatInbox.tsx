@@ -11,9 +11,27 @@ import DefaultResponseTemplate from './DefaultResponseTemplate';
 import Header from './Header';
 import InputBox from './InputBox';
 import { useLocalStorage } from './useLocalStorage';
-import { publicApi } from '../api/axios';
+import { publicApi, baseURL } from '../api/axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+// 🔧 FIX: Use the same base URL as the API instance
+// This ensures socket.io connects to the same server as the REST API
+const getApiBaseUrl = () => {
+  // Try baseURL from axios config first
+  if (baseURL) {
+    console.log('[Chat Widget] Using baseURL from axios config:', baseURL);
+    return baseURL;
+  }
+  // Try environment variable
+  if (import.meta.env.VITE_API_BASE_URL) {
+    console.log('[Chat Widget] Using VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  // Fallback to localhost:7575 (matching widget.js)
+  console.log('[Chat Widget] Using fallback URL: http://localhost:7575');
+  return 'http://localhost:7575';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 interface ChatState {
   showChat: boolean;
@@ -315,45 +333,172 @@ const ChatInbox = ({
     };
   }, [customerId, showChat, socketConnected, fetchNewMessages]);
 
+  // 🔧 FIX: Connect socket immediately when widget opens, not just when customerId exists
   useEffect(() => {
+    console.log('[Chat Widget] ========== SOCKET INITIALIZATION ==========');
+    console.log('[Chat Widget] API_BASE_URL:', API_BASE_URL);
+    console.log('[Chat Widget] baseURL from axios:', baseURL);
+    console.log('[Chat Widget] VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+    
+    // 🔧 FIX: Use a ref to track if this is a real unmount or just Strict Mode remount
+    let isMounted = true;
+    let connectionTimeout: ReturnType<typeof setTimeout> | null = null;
+    
+    // 🔧 FIX: Track when socket was created to detect Strict Mode disconnects
+    const socketCreatedAt = Date.now();
+    const STRICT_MODE_WINDOW = 2000; // 2 seconds - if disconnect happens within this, likely Strict Mode
+    
     const newSocket = io(API_BASE_URL, { 
-      transports: ['websocket'], 
+      transports: ['websocket', 'polling'], // 🔧 FIX: Add polling as fallback
       withCredentials: true,
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionAttempts: 5,
+      timeout: 20000, // 🔧 FIX: Increase timeout
+      autoConnect: true, // 🔧 FIX: Explicitly enable auto-connect
     });
+    
+    console.log('[Chat Widget] Socket instance created:', newSocket.id || 'no ID yet');
+    console.log('[Chat Widget] Socket connected state:', newSocket.connected);
     
     setSocket(newSocket);
     
+    // 🔧 FIX: Check if socket is already connected (can happen with fast connections)
+    if (newSocket.connected) {
+      console.log('[Chat Widget] ✅ Socket already connected immediately');
+      if (isMounted) {
+        setSocketConnected(true);
+      }
+      if (customerIdRef.current) {
+        console.log('[Chat Widget] Joining customer room (immediate):', customerIdRef.current);
+        newSocket.emit('joinCustomerRoom', customerIdRef.current);
+      }
+    } else {
+      console.log('[Chat Widget] ⏳ Socket not connected yet, waiting for connect event...');
+    }
+    
     // Socket connection handlers
     newSocket.on('connect', () => {
-      console.log('[Chat Widget] Socket connected');
+      if (!isMounted) {
+        console.log('[Chat Widget] ⚠️ Component unmounted, ignoring connect event');
+        return;
+      }
+      console.log('[Chat Widget] ✅✅✅ Socket connected successfully! ID:', newSocket.id);
+      console.log('[Chat Widget] Setting socketConnected to TRUE');
       setSocketConnected(true);
-      if (customerId) {
-        newSocket.emit('joinCustomerRoom', customerId);
+      // Join customer room if customerId is already available
+      if (customerIdRef.current) {
+        console.log('[Chat Widget] Joining customer room:', customerIdRef.current);
+        newSocket.emit('joinCustomerRoom', customerIdRef.current);
+      }
+    });
+    
+    newSocket.on('disconnect', (reason) => {
+      const timeSinceCreation = Date.now() - socketCreatedAt;
+      console.log('[Chat Widget] ❌ Socket disconnected. Reason:', reason);
+      console.log('[Chat Widget] Time since creation:', timeSinceCreation, 'ms');
+      
+      // 🔧 FIX: If disconnect happens very quickly after creation AND it's "io server disconnect",
+      // it's likely Strict Mode cleanup - ignore it
+      if (isMounted && reason === 'io server disconnect' && timeSinceCreation < STRICT_MODE_WINDOW) {
+        console.log('[Chat Widget] ⚠️ Server disconnect during mount window - likely Strict Mode, ignoring');
+        // Don't update state, let it reconnect
+        return;
+      }
+      
+      // Real disconnect - update state
+      if (isMounted) {
+        console.log('[Chat Widget] Setting socketConnected to FALSE (real disconnect)');
+        setSocketConnected(false);
       }
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('[Chat Widget] Socket disconnected');
-      setSocketConnected(false);
-    });
-
     newSocket.on('connect_error', (error) => {
-      console.error('[Chat Widget] Socket connection error:', error);
-      setSocketConnected(false);
+      console.error('[Chat Widget] ❌❌❌ Socket connection error:', error);
+      console.error('[Chat Widget] Error message:', error.message);
+      console.error('[Chat Widget] Error type:', (error as any).type);
+      console.error('[Chat Widget] Connection URL:', API_BASE_URL);
+      if (isMounted) {
+        console.error('[Chat Widget] Setting socketConnected to FALSE');
+        setSocketConnected(false);
+      }
     });
 
-    if (customerId) {
-      newSocket.emit('joinCustomerRoom', customerId);
-    }
+    newSocket.on('reconnect', (attemptNumber) => {
+      console.log('[Chat Widget] 🔄 Socket reconnected after', attemptNumber, 'attempts');
+      if (isMounted) {
+        setSocketConnected(true);
+        if (customerIdRef.current) {
+          newSocket.emit('joinCustomerRoom', customerIdRef.current);
+        }
+      }
+    });
+
+    newSocket.on('reconnect_error', (error) => {
+      console.error('[Chat Widget] ❌ Socket reconnection error:', error);
+    });
+
+    newSocket.on('reconnect_failed', () => {
+      console.error('[Chat Widget] ❌ Socket reconnection failed after all attempts');
+      if (isMounted) {
+        setSocketConnected(false);
+      }
+    });
     
+    // 🔧 FIX: Delay cleanup to allow connection to establish (handles Strict Mode)
+    // Only disconnect if component is actually unmounting (not just remounting)
     return () => { 
-      newSocket.disconnect();
-      setSocketConnected(false);
+      const timeSinceCreation = Date.now() - socketCreatedAt;
+      console.log('[Chat Widget] Cleanup function called - marking as unmounted');
+      console.log('[Chat Widget] Time since socket creation:', timeSinceCreation, 'ms');
+      
+      isMounted = false;
+      
+      // Clear any pending timeouts
+      if (connectionTimeout) {
+        clearTimeout(connectionTimeout);
+      }
+      
+      // 🔧 FIX: If cleanup happens very quickly after creation, it's likely Strict Mode
+      // Don't disconnect - let the socket stay connected for the remount
+      if (timeSinceCreation < STRICT_MODE_WINDOW) {
+        console.log('[Chat Widget] ⚠️ Cleanup within Strict Mode window - NOT disconnecting socket');
+        console.log('[Chat Widget] Socket will remain connected for remount');
+        // Just remove event listeners to prevent memory leaks
+        newSocket.removeAllListeners();
+        return;
+      }
+      
+      // Real unmount - disconnect the socket
+      if (newSocket.connected) {
+        console.log('[Chat Widget] Socket is connected, disconnecting (real unmount)...');
+        newSocket.disconnect();
+      } else {
+        console.log('[Chat Widget] Socket not connected, skipping disconnect');
+      }
     };
-  }, [customerId]);
+  }, []); // 🔧 FIX: Connect immediately on mount, not dependent on customerId
+
+  // 🔧 FIX: Join customer room when customerId becomes available
+  useEffect(() => {
+    if (socket && socket.connected && customerId) {
+      console.log('[Chat Widget] Joining customer room (customerId available):', customerId);
+      socket.emit('joinCustomerRoom', customerId);
+    } else {
+      if (socket && !socket.connected) {
+        console.log('[Chat Widget] ⚠️ Socket exists but not connected, cannot join room');
+      }
+      if (!customerId) {
+        console.log('[Chat Widget] ⚠️ customerId not available yet');
+      }
+    }
+  }, [socket, customerId]);
+  
+  // 🔧 FIX: Debug socketConnected state changes
+  useEffect(() => {
+    console.log('[Chat Widget] 🔄 socketConnected state changed to:', socketConnected);
+    console.log('[Chat Widget] Socket instance:', socket ? (socket.connected ? 'connected' : 'disconnected') : 'null');
+  }, [socketConnected, socket]);
 
 
   useEffect(() => {
@@ -473,15 +618,42 @@ const ChatInbox = ({
       setErrors(result.error.flatten().fieldErrors as FormErrors);
       return;
     }
+    
+    // 🔧 FIX: Validate businessId is present
+    if (!businessId || businessId.trim() === '') {
+      toast.error('Business ID is missing. Please refresh the page.');
+      console.error('[Chat Widget] businessId is missing:', businessId);
+      return;
+    }
+    
     try {
-      const response = await publicApi.post(`/api/v1/messages/create-chat-session`, {
-        name, email, phone, businessId, customerId,
-      });
+      // 🔧 FIX: Only include customerId if it's a valid non-empty string
+      const requestBody: any = {
+        name, 
+        email, 
+        phone, 
+        businessId: businessId.trim(),
+      };
+      
+      if (customerId && customerId.trim() !== '') {
+        requestBody.customerId = customerId.trim();
+      }
+      
+      console.log('[Chat Widget] Creating chat session with:', { ...requestBody, email: requestBody.email }); // Log without sensitive data
+      
+      const response = await publicApi.post(`/api/v1/messages/create-chat-session`, requestBody);
       const { customerId: newCustomerId, conversationId: newConversationId } = response.data.data;
       setErrors({});
       setChatState(prev => ({ ...prev, customerId: newCustomerId, conversationId: newConversationId, showChat: true }));
-    } catch (error) {
-      toast.error("Could not start chat session.");
+    } catch (error: any) {
+      console.error('[Chat Widget] Error creating chat session:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || "Could not start chat session.";
+      toast.error(errorMessage);
+      
+      // 🔧 FIX: Show validation errors if available
+      if (error?.response?.data?.data) {
+        setErrors(error.response.data.data as FormErrors);
+      }
     }
   };
 
@@ -542,9 +714,13 @@ const ChatInbox = ({
   };
   
   const handleDefaultResponseClick = (question: string, answer: string) => {
+    // Add question and answer directly to messages without sending to server
     const userMessage: Message = { text: question, sender: 'user', type: 'text' };
     const botMessage: Message = { text: answer, sender: 'bot', type: 'text' };
-    setChatState(prev => ({ ...prev, messages: [...prev.messages, userMessage, botMessage] }));
+    setChatState(prev => ({ 
+      ...prev, 
+      messages: [...prev.messages, userMessage, botMessage] 
+    }));
   };
   
   useEffect(() => {
@@ -556,7 +732,8 @@ const ChatInbox = ({
   }, [showChat, businessId, initialAgentName]);
 
   return (
-    <div className="w-full h-full bg-white rounded-[16px] shadow-md flex flex-col overflow-hidden">
+    <div className="w-full h-full bg-white rounded-[20px] shadow-2xl flex flex-col overflow-hidden">
+      {/* Fixed Header - Always at top */}
       <div className="flex-shrink-0">
         <Header 
           agentName={headerAgentName} 
@@ -565,40 +742,105 @@ const ChatInbox = ({
           socketConnected={socketConnected}
         />
       </div>
-      <div className="flex-grow overflow-y-auto">
+      {/* Scrollable Content Area */}
+      <div className="flex-1 overflow-y-auto min-h-0">
         {!showChat ? (
-          <div className="flex flex-col justify-center items-center p-6 h-full">
-            <h3 className="text-lg font-bold mb-1">{t('greeting')}</h3>
-            <p className="text-xs text-gray-500 mb-6 text-center">{t('formInstruction')}</p>
-            <div className="w-full mb-3">
-              <input className={`w-full px-3 py-2 border outline-none rounded-md text-sm ${errors.name ? 'border-red-500' : 'border-gray-300'}`} type="text" placeholder={t('namePlaceholder')} value={name} onChange={(e) => setChatState(prev => ({ ...prev, name: e.target.value }))}/>
-              {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+          <div className="flex flex-col justify-center items-center p-6 min-h-full bg-gradient-to-b from-white to-gray-50/30">
+            {/* Greeting Section */}
+            <div className="w-full px-6 pt-8 pb-6 bg-gradient-to-br from-[#ff21b0]/5 via-[#ff21b0]/2 to-transparent mb-6">
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                {t('greeting') || 'Hi there 👋'}
+              </h3>
+              <p className="text-base text-gray-600 font-medium">
+                {t('formInstruction') || 'How can we help?'}
+              </p>
             </div>
-            <div className="w-full mb-3">
-              <input className={`w-full px-3 py-2 border outline-none rounded-md text-sm ${errors.phone ? 'border-red-500' : 'border-gray-300'}`} type="tel" placeholder={t('phonePlaceholder')} value={phone} onChange={(e) => setChatState(prev => ({ ...prev, phone: e.target.value }))}/>
-              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
+            
+            {/* Form Section */}
+            <div className="w-full space-y-4 max-w-md">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  {t('namePlaceholder') || 'Your Name'}
+                </label>
+                <input 
+                  className={`w-full h-[48px] px-4 border-2 outline-none rounded-xl text-sm transition-all bg-white ${
+                    errors.name 
+                      ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20' 
+                      : 'border-gray-200 focus:border-[#ff21b0] focus:ring-2 focus:ring-[#ff21b0]/20'
+                  }`} 
+                  type="text" 
+                  placeholder={t('namePlaceholder') || 'Enter your name'} 
+                  value={name} 
+                  onChange={(e) => setChatState(prev => ({ ...prev, name: e.target.value }))}
+                />
+                {errors.name && <p className="text-red-500 text-xs mt-1.5">{errors.name}</p>}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  {t('phonePlaceholder') || 'Phone Number'}
+                </label>
+                <input 
+                  className={`w-full h-[48px] px-4 border-2 outline-none rounded-xl text-sm transition-all bg-white ${
+                    errors.phone 
+                      ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20' 
+                      : 'border-gray-200 focus:border-[#ff21b0] focus:ring-2 focus:ring-[#ff21b0]/20'
+                  }`} 
+                  type="tel" 
+                  placeholder={t('phonePlaceholder') || 'Enter your phone'} 
+                  value={phone} 
+                  onChange={(e) => setChatState(prev => ({ ...prev, phone: e.target.value }))}
+                />
+                {errors.phone && <p className="text-red-500 text-xs mt-1.5">{errors.phone}</p>}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  {t('emailPlaceholder') || 'Email Address'}
+                </label>
+                <input 
+                  className={`w-full h-[48px] px-4 border-2 outline-none rounded-xl text-sm transition-all bg-white ${
+                    errors.email 
+                      ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20' 
+                      : 'border-gray-200 focus:border-[#ff21b0] focus:ring-2 focus:ring-[#ff21b0]/20'
+                  }`} 
+                  type="email" 
+                  placeholder={t('emailPlaceholder') || 'Enter your email'} 
+                  value={email} 
+                  onChange={(e) => setChatState(prev => ({ ...prev, email: e.target.value }))}
+                />
+                {errors.email && <p className="text-red-500 text-xs mt-1.5">{errors.email}</p>}
+              </div>
+              
+              <button 
+                onClick={startChatSession} 
+                className="w-full h-[48px] bg-gradient-to-r from-[#ff21b0] to-[#c24d99] text-white font-semibold rounded-xl hover:from-[#e91e9d] hover:to-[#b03d88] transition-all shadow-lg hover:shadow-xl mt-6"
+              >
+                {t('continueButton') || 'Continue'}
+              </button>
             </div>
-            <div className="w-full mb-4">
-              <input className={`w-full px-3 py-2 border outline-none rounded-md text-sm ${errors.email ? 'border-red-500' : 'border-gray-300'}`} type="email" placeholder={t('emailPlaceholder')} value={email} onChange={(e) => setChatState(prev => ({ ...prev, email: e.target.value }))}/>
-              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
-            </div>
-            <button onClick={startChatSession} className="w-full bg-[#ff21b0] cursor-pointer text-white py-2 rounded-md font-medium hover:bg-[#f18cce] transition">
-              {t('continueButton')}
-            </button>
           </div>
         ) : (
           <>
-            <ChatMessages messages={messages} isAgentTyping={isAgentTyping} />
-            <DefaultResponseTemplate
-              defaultResponses={defaultResponses}
-              onSelect={handleDefaultResponseClick}
-            />
-            <InputBox
-              input={input}
-              setInput={setInput}
-              sendMessage={() => sendMessage()}
-              disabled={conversationStatus === 'closed'}
-            />
+            <div className="flex flex-col flex-1 min-h-0 relative">
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <ChatMessages messages={messages} isAgentTyping={isAgentTyping} agentName={headerAgentName} />
+            </div>
+            <div className="flex-shrink-0 bg-white border-t border-gray-100 relative z-20">
+              {defaultResponses.length > 0 && (
+                <DefaultResponseTemplate
+                  defaultResponses={defaultResponses}
+                  onSelect={handleDefaultResponseClick}
+                />
+              )}
+              <InputBox
+                input={input}
+                setInput={setInput}
+                sendMessage={() => sendMessage()}
+                disabled={conversationStatus === 'closed'}
+              />
+            </div>
+          </div>
           </>
         )}
       </div>

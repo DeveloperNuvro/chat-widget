@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { PiRobot } from 'react-icons/pi';
 import { cn } from '../lib/utils'; 
 import TypingLoader from './TypingLoader';
 import FormattedText from './FormattedText';
@@ -17,6 +18,7 @@ export interface Message {
 interface ChatMessagesProps {
   messages: Message[];
   isAgentTyping: boolean;
+  agentName?: string;
 }
 
 // Helper function to format timestamp
@@ -80,7 +82,7 @@ const isSameDay = (date1: Date | string | null, date2: Date | string | null): bo
   return d1.toDateString() === d2.toDateString();
 };
 
-const ChatMessages = ({ messages, isAgentTyping }: ChatMessagesProps) => {
+const ChatMessages = ({ messages, isAgentTyping, agentName }: ChatMessagesProps) => {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -89,7 +91,7 @@ const ChatMessages = ({ messages, isAgentTyping }: ChatMessagesProps) => {
 
   // Using your original JSX and class names
   return (
-    <div className="flex flex-col gap-2 scrollbar-hide h-[350px] px-3 overflow-y-auto pt-10 pb-4">
+    <div className="flex flex-col gap-1 scrollbar-hide h-[350px] px-4 overflow-y-auto pt-6 pb-4 bg-gradient-to-b from-gray-50/50 to-white">
       {messages?.map((msg, index) => {
         // Use _id as key if available, otherwise use index + text + timestamp for uniqueness
         const messageKey = (msg as any)._id || `msg-${index}-${msg.text}-${msg.timestamp?.getTime() || Date.now()}`;
@@ -124,35 +126,53 @@ const ChatMessages = ({ messages, isAgentTyping }: ChatMessagesProps) => {
               
               <div
                 className={cn(
-                  'flex flex-col animate-fade-in transition-all duration-200',
-                  msg.sender === 'user' ? 'items-end' : 'items-start'
+                  'flex items-end gap-2 animate-fade-in transition-all duration-200 mb-3',
+                  msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'
                 )}
               >
               {
                   msg.type === "loader" ? (
-                  <TypingLoader/>
+                  <div className="flex items-start gap-2">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#ff21b0] to-[#c24d99] flex items-center justify-center text-white text-xs font-bold shadow-md">
+                      <PiRobot className="w-4 h-4" />
+                    </div>
+                    <TypingLoader/>
+                  </div>
                   ) :
                   (
-                      <div className="flex flex-col max-w-[80%] group">
+                      <div className="flex items-end gap-2 max-w-[85%] group">
+                        {/* Avatar for bot messages */}
+                        {msg.sender === 'bot' && (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#ff21b0] to-[#c24d99] flex items-center justify-center text-white text-xs font-bold shadow-md flex-shrink-0 mb-1">
+                            <PiRobot className="w-4 h-4" />
+                          </div>
+                        )}
+                        
+                        <div className="flex flex-col">
                           <div
                               className={cn(
-                                  'px-4 py-2.5 text-sm break-words rounded-xl shadow-sm transition-all duration-200',
+                                  'px-4 py-3 text-sm break-words rounded-2xl shadow-sm transition-all duration-200',
                                   'hover:shadow-md',
                                   msg.sender === 'user'
-                                  ? 'bg-gradient-to-r from-[#ff21b0] to-[#c24d99] text-white rounded-br-none'
-                                  : 'bg-[#f8e7f2] text-[#ff21b0] rounded-bl-none'
+                                  ? 'bg-gradient-to-r from-[#ff21b0] to-[#c24d99] text-white rounded-br-md'
+                                  : 'bg-white text-gray-800 rounded-bl-md border border-gray-100'
                               )}
                           >
                               <FormattedText 
                                 text={msg.text} 
-                                className={msg.sender === 'user' ? 'text-white' : 'text-[#ff21b0]'}
+                                className={msg.sender === 'user' ? 'text-white' : 'text-gray-800'}
                               />
                           </div>
                           {msg.timestamp && (
                               <div className={cn(
-                                'flex items-center gap-1 mt-1 px-2',
+                                'flex items-center gap-1.5 mt-1.5 px-1',
                                 msg.sender === 'user' ? 'justify-end' : 'justify-start'
                               )}>
+                                {msg.sender === 'bot' && (
+                                  <span className="text-xs font-medium text-gray-500">
+                                    {agentName || 'AI'}
+                                  </span>
+                                )}
                                 <span
                                     className={cn(
                                         'text-xs',
@@ -169,6 +189,14 @@ const ChatMessages = ({ messages, isAgentTyping }: ChatMessagesProps) => {
                                 )}
                               </div>
                           )}
+                        </div>
+                        
+                        {/* Avatar for user messages */}
+                        {msg.sender === 'user' && (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center text-white text-xs font-bold shadow-md flex-shrink-0 mb-1">
+                            <span className="text-xs">You</span>
+                          </div>
+                        )}
                       </div>
                   )
               }

@@ -21,38 +21,40 @@ const InputBox = ({ input, setInput, sendMessage, disabled = false }: InputBoxPr
   };
 
   return (
-    <div className="w-[350px] px-3 flex flex-col items-center mb-5 z-50">
+    <div className="w-full px-4 py-3 flex flex-col items-center bg-white border-t border-gray-100">
       {showEmojiPicker && (
-        <div>
+        <div className="absolute bottom-20 right-4 z-50">
           <EmojiPicker onEmojiClick={handleEmojiClick} />
         </div>
       )}
-      <div className="w-full h-[40px] flex items-center relative">
-        <input
-          type="text"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !disabled && input.trim() && sendMessage()}
-          className="w-full h-full rounded-[8px] border border-gray-200 outline-none px-3 py-2 pr-[60px] focus:border-[#ff21b0] focus:ring-2 focus:ring-[#ff21b0]/20 transition-all"
-          placeholder={t('inputPlaceholder')}
-          disabled={disabled}
-          maxLength={1000}
-        />
+      <div className="w-full flex items-center gap-2">
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !disabled && input.trim() && sendMessage()}
+            className="w-full h-[48px] rounded-2xl border-2 border-gray-200 outline-none px-4 py-3 pr-12 bg-gray-50 focus:bg-white focus:border-[#ff21b0] focus:ring-2 focus:ring-[#ff21b0]/20 transition-all text-sm"
+            placeholder={t('inputPlaceholder') || "Send us a message..."}
+            disabled={disabled}
+            maxLength={1000}
+          />
+          <button
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 cursor-pointer hover:text-[#ff21b0] transition-colors p-2 rounded-lg hover:bg-gray-100"
+            onClick={() => setShowEmojiPicker(prev => !prev)}
+            disabled={disabled}
+            title="Add emoji"
+          >
+            <GrEmoji className="w-5 h-5" />
+          </button>
+        </div>
         <button
           onClick={sendMessage}
           disabled={disabled || !input.trim()}
-          className="absolute right-10 cursor-pointer text-[#ff21b0] hover:text-[#c24d99] transition-all disabled:text-gray-400 disabled:cursor-not-allowed disabled:hover:text-gray-400 p-1.5 rounded-full hover:bg-[#ff21b0]/10"
+          className="w-[48px] h-[48px] flex items-center justify-center rounded-2xl bg-gradient-to-r from-[#ff21b0] to-[#c24d99] text-white hover:from-[#e91e9d] hover:to-[#b03d88] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl disabled:shadow-md"
           title="Send message"
         >
-          <FaPaperPlane />
-        </button>
-        <button
-          className="absolute right-2 text-gray-500 cursor-pointer hover:text-[#ff21b0] transition-colors p-1.5 rounded-full hover:bg-gray-100"
-          onClick={() => setShowEmojiPicker(prev => !prev)}
-          disabled={disabled}
-          title="Add emoji"
-        >
-          <GrEmoji />
+          <FaPaperPlane className="w-4 h-4" />
         </button>
       </div>
     </div>
