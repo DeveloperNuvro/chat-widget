@@ -2,19 +2,24 @@ import { PiRobot } from "react-icons/pi";
 import { FaRegWindowMinimize, FaSyncAlt } from "react-icons/fa";
 import { useTranslation } from 'react-i18next';
 import { cn } from '../lib/utils';
+import { getColorVariations } from '../utils/colorUtils';
 
 interface HeaderProps {
   agentName: string;
   setOpen: (isOpen: boolean) => void;
   onReset: () => void;
   socketConnected?: boolean;
+  businessLogo?: string | null;
+  widgetColor?: string;
 }
 
 const Header = ({ 
   agentName, 
   setOpen, 
   onReset,
-  socketConnected = false // 🔧 FIX: Default to false, not true
+  socketConnected = false,
+  businessLogo = null,
+  widgetColor = '#ff21b0'
 }: HeaderProps) => {
   const { t, i18n } = useTranslation();
 
@@ -24,15 +29,46 @@ const Header = ({
 
   // Show online if socket is connected, regardless of browser online status
   const connectionStatus = socketConnected ? 'online' : 'offline';
+  const colors = getColorVariations(widgetColor);
 
   return (
-    <div className="w-full min-h-[70px] flex justify-between items-center rounded-t-[20px] px-4 sm:px-5 py-3 sm:py-4 shadow-lg bg-gradient-to-r from-[#ff21b0] via-[#e91e9d] to-[#c24d99]">
+    <div 
+      className="w-full min-h-[70px] flex justify-between items-center rounded-t-[20px] px-4 sm:px-5 py-3 sm:py-4 shadow-lg"
+      style={{
+        background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientMiddle}, ${colors.gradientEnd})`
+      }}
+    >
       <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
         <div className="relative flex-shrink-0">
-          <div className="w-[44px] h-[44px] sm:w-[48px] sm:h-[48px] bg-white rounded-full flex items-center justify-center shadow-lg ring-2 ring-white/30">
-            <div className="text-[20px] sm:text-[24px] text-[#ff21b0]">
-              <PiRobot />
-            </div>
+          <div className="relative w-[44px] h-[44px] sm:w-[48px] sm:h-[48px] bg-white rounded-full flex items-center justify-center shadow-lg ring-2 ring-white/30 overflow-hidden">
+            {businessLogo ? (
+              <>
+                <img 
+                  src={businessLogo} 
+                  alt="Business Logo" 
+                  className="w-full h-full object-cover rounded-full"
+                  onError={(e) => {
+                    // Hide image and show fallback
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    const parent = target.parentElement;
+                    if (parent) {
+                      const fallback = parent.querySelector('.logo-fallback') as HTMLElement;
+                      if (fallback) {
+                        fallback.style.display = 'flex';
+                      }
+                    }
+                  }}
+                />
+                <div className="logo-fallback hidden absolute inset-0 items-center justify-center text-[20px] sm:text-[24px] text-[#ff21b0]">
+                  <PiRobot />
+                </div>
+              </>
+            ) : (
+              <div className="text-[20px] sm:text-[24px] text-[#ff21b0]">
+                <PiRobot />
+              </div>
+            )}
           </div>
           {/* Connection status indicator */}
           <div className={cn(

@@ -3,6 +3,7 @@ import { PiRobot } from 'react-icons/pi';
 import { cn } from '../lib/utils'; 
 import TypingLoader from './TypingLoader';
 import FormattedText from './FormattedText';
+import { getColorVariations } from '../utils/colorUtils';
 
 
 
@@ -19,6 +20,8 @@ interface ChatMessagesProps {
   messages: Message[];
   isAgentTyping: boolean;
   agentName?: string;
+  businessLogo?: string | null;
+  widgetColor?: string;
 }
 
 // Helper function to format timestamp
@@ -82,8 +85,9 @@ const isSameDay = (date1: Date | string | null, date2: Date | string | null): bo
   return d1.toDateString() === d2.toDateString();
 };
 
-const ChatMessages = ({ messages, isAgentTyping, agentName }: ChatMessagesProps) => {
+const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widgetColor = '#ff21b0' }: ChatMessagesProps) => {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const colors = getColorVariations(widgetColor);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -133,18 +137,76 @@ const ChatMessages = ({ messages, isAgentTyping, agentName }: ChatMessagesProps)
               {
                   msg.type === "loader" ? (
                   <div className="flex items-start gap-2">
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#ff21b0] to-[#c24d99] flex items-center justify-center text-white text-xs font-bold shadow-md">
-                      <PiRobot className="w-4 h-4" />
+                    <div 
+                      className="relative w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-md overflow-hidden"
+                      style={{
+                        background: `linear-gradient(to bottom right, ${colors.gradientStart}, ${colors.gradientEnd})`
+                      }}
+                    >
+                      {businessLogo ? (
+                        <>
+                          <img 
+                            src={businessLogo} 
+                            alt="Business Logo" 
+                            className="w-full h-full object-cover rounded-full"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent) {
+                                const fallback = parent.querySelector('.logo-fallback') as HTMLElement;
+                                if (fallback) {
+                                  fallback.style.display = 'flex';
+                                }
+                              }
+                            }}
+                          />
+                          <div className="logo-fallback hidden absolute inset-0 items-center justify-center">
+                            <PiRobot className="w-4 h-4" />
+                          </div>
+                        </>
+                      ) : (
+                        <PiRobot className="w-4 h-4" />
+                      )}
                     </div>
-                    <TypingLoader/>
+                    <TypingLoader widgetColor={widgetColor} />
                   </div>
                   ) :
                   (
                       <div className="flex items-end gap-2 max-w-[85%] group">
                         {/* Avatar for bot messages */}
                         {msg.sender === 'bot' && (
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#ff21b0] to-[#c24d99] flex items-center justify-center text-white text-xs font-bold shadow-md flex-shrink-0 mb-1">
-                            <PiRobot className="w-4 h-4" />
+                          <div 
+                            className="relative w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-md flex-shrink-0 mb-1 overflow-hidden"
+                            style={{
+                              background: `linear-gradient(to bottom right, ${colors.gradientStart}, ${colors.gradientEnd})`
+                            }}
+                          >
+                            {businessLogo ? (
+                              <>
+                                <img 
+                                  src={businessLogo} 
+                                  alt="Business Logo" 
+                                  className="w-full h-full object-cover rounded-full"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.style.display = 'none';
+                                    const parent = target.parentElement;
+                                    if (parent) {
+                                      const fallback = parent.querySelector('.logo-fallback') as HTMLElement;
+                                      if (fallback) {
+                                        fallback.style.display = 'flex';
+                                      }
+                                    }
+                                  }}
+                                />
+                                <div className="logo-fallback hidden absolute inset-0 items-center justify-center">
+                                  <PiRobot className="w-4 h-4" />
+                                </div>
+                              </>
+                            ) : (
+                              <PiRobot className="w-4 h-4" />
+                            )}
                           </div>
                         )}
                         
@@ -154,9 +216,12 @@ const ChatMessages = ({ messages, isAgentTyping, agentName }: ChatMessagesProps)
                                   'px-4 py-3 text-sm break-words rounded-2xl shadow-sm transition-all duration-200',
                                   'hover:shadow-md',
                                   msg.sender === 'user'
-                                  ? 'bg-gradient-to-r from-[#ff21b0] to-[#c24d99] text-white rounded-br-md'
+                                  ? 'text-white rounded-br-md'
                                   : 'bg-white text-gray-800 rounded-bl-md border border-gray-100'
                               )}
+                              style={msg.sender === 'user' ? {
+                                background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`
+                              } : {}}
                           >
                               <FormattedText 
                                 text={msg.text} 
@@ -208,7 +273,7 @@ const ChatMessages = ({ messages, isAgentTyping, agentName }: ChatMessagesProps)
       {isAgentTyping && (
         <div className="flex justify-start">
           <div className="bg-gray-200 dark:bg-gray-700 rounded-lg">
-            <TypingLoader />
+            <TypingLoader widgetColor={widgetColor} />
           </div>
         </div>
       )}

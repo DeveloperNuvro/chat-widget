@@ -12,5 +12,27 @@
   "alert.fillAllFields": "Please fill all fields",
   "error.nameRequired": "Name is required",
   "error.invalidPhone": "Please enter a valid whatsapp number",
-  "error.invalidEmail": "Please enter a valid email address"
+  "error.invalidEmail": "Please enter a valid email address",
+  "tabs": {
+    "welcome": "Welcome",
+    "chat": "Chat",
+    "help": "Help"
+  },
+  "welcome": {
+    "title": "Welcome!",
+    "message": "Hello! I'm {{agentName}}, your AI assistant. How can I help you today?",
+    "howCanIHelp": "How can I help you?",
+    "features": {
+      "answerQuestions": "Answer your questions",
+      "helpRequests": "Help with your requests",
+      "provideInfo": "Provide information",
+      "assistSupport": "Assist with support"
+    },
+    "startChatting": "Start Chatting"
+  },
+  "help": {
+    "title": "Frequently Asked Questions",
+    "noFaqs": "No FAQs available at the moment.",
+    "startChatInstead": "Start a chat instead"
+  }
 }

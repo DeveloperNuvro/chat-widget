@@ -12,5 +12,27 @@
   "alert.fillAllFields": "Por favor, rellene todos los campos",
   "error.nameRequired": "El nombre es obligatorio",
   "error.invalidPhone": "Por favor, introduzca un número de teléfono válido",
-  "error.invalidEmail": "Por favor, introduzca una dirección de correo electrónico válida"
+  "error.invalidEmail": "Por favor, introduzca una dirección de correo electrónico válida",
+  "tabs": {
+    "welcome": "Bienvenido",
+    "chat": "Chat",
+    "help": "Ayuda"
+  },
+  "welcome": {
+    "title": "¡Bienvenido!",
+    "message": "¡Hola! Soy {{agentName}}, tu asistente de IA. ¿Cómo puedo ayudarte hoy?",
+    "howCanIHelp": "¿Cómo puedo ayudarte?",
+    "features": {
+      "answerQuestions": "Responder tus preguntas",
+      "helpRequests": "Ayudar con tus solicitudes",
+      "provideInfo": "Proporcionar información",
+      "assistSupport": "Asistir con soporte"
+    },
+    "startChatting": "Comenzar a chatear"
+  },
+  "help": {
+    "title": "Preguntas Frecuentes",
+    "noFaqs": "No hay preguntas frecuentes disponibles en este momento.",
+    "startChatInstead": "Iniciar un chat en su lugar"
+  }
 }

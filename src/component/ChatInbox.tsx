@@ -12,6 +12,7 @@ import Header from './Header';
 import InputBox from './InputBox';
 import { useLocalStorage } from './useLocalStorage';
 import { publicApi, baseURL } from '../api/axios';
+import { getColorVariations } from '../utils/colorUtils';
 
 // 🔧 FIX: Use the same base URL as the API instance
 // This ensures socket.io connects to the same server as the REST API
@@ -52,13 +53,28 @@ const ChatInbox = ({
   agentName: initialAgentName,
   setOpen,
   businessId,
+  hideHeader = false,
+  onSocketStatusChange,
+  onAgentNameChange,
+  onResetChatReady,
+  businessLogo = null,
+  widgetColor = '#ff21b0',
 }: {
   agentName: string;
   businessId: string;
   setOpen: (isOpen: boolean) => void;
+  hideHeader?: boolean;
+  onSocketStatusChange?: (status: boolean) => void;
+  onAgentNameChange?: (name: string) => void;
+  onResetChatReady?: (resetFn: () => void) => void;
+  businessLogo?: string | null;
+  widgetColor?: string;
 }) => {
   const { t } = useTranslation();
   const localStorageKey = `chat_state_${businessId}`;
+  
+  // Generate color variations from widgetColor
+  const colors = getColorVariations(widgetColor);
 
   const getInitialState = (): ChatState => ({
     showChat: false,
@@ -82,6 +98,13 @@ const ChatInbox = ({
   const [defaultResponses, setDefaultResponses] = useState<{ question: string; answer: string }[]>([]);
   
   const [headerAgentName, setHeaderAgentName] = useState<string>(initialAgentName?.toString() ?? currentAgentName?.toString() ?? '');
+
+  // Notify parent of initial agent name
+  useEffect(() => {
+    if (onAgentNameChange && headerAgentName) {
+      onAgentNameChange(headerAgentName);
+    }
+  }, []); // Only on mount
 
   // Message polling fallback mechanism
   const [lastMessageTimestamp, setLastMessageTimestamp] = useState<Date | null>(null);
@@ -110,6 +133,13 @@ const ChatInbox = ({
     setDefaultResponses([]);
     setErrors({});
   }, [localStorageKey, setChatState]);
+
+  // Expose resetChat to parent
+  useEffect(() => {
+    if (onResetChatReady) {
+      onResetChatReady(resetChat);
+    }
+  }, [onResetChatReady, resetChat]);
 
   useEffect(() => {
     if (conversationStatus === 'closed') {
@@ -498,7 +528,11 @@ const ChatInbox = ({
   useEffect(() => {
     console.log('[Chat Widget] 🔄 socketConnected state changed to:', socketConnected);
     console.log('[Chat Widget] Socket instance:', socket ? (socket.connected ? 'connected' : 'disconnected') : 'null');
-  }, [socketConnected, socket]);
+    // Notify parent of socket status change
+    if (onSocketStatusChange) {
+      onSocketStatusChange(socketConnected);
+    }
+  }, [socketConnected, socket, onSocketStatusChange]);
 
 
   useEffect(() => {
@@ -509,6 +543,10 @@ const ChatInbox = ({
       
       if (payload.sender === 'agent' && payload.agentName) {
         setHeaderAgentName(payload.agentName);
+        // Notify parent of agent name change
+        if (onAgentNameChange) {
+          onAgentNameChange(payload.agentName);
+        }
       }
       
       const senderType: Message['sender'] = payload.sender === 'system' ? 'system' : 'bot';
@@ -567,7 +605,12 @@ const ChatInbox = ({
         toast.success(`You are now connected with ${payload.agentName}`);
       }
       
-      setHeaderAgentName(payload.agentName || initialAgentName);
+      const newAgentName = payload.agentName || initialAgentName;
+      setHeaderAgentName(newAgentName);
+      // Notify parent of agent name change
+      if (onAgentNameChange) {
+        onAgentNameChange(newAgentName);
+      }
 
       setChatState(prev => ({
         ...prev,
@@ -732,30 +775,22 @@ const ChatInbox = ({
   }, [showChat, businessId, initialAgentName]);
 
   return (
-    <div className="w-full h-full bg-white rounded-[20px] shadow-2xl flex flex-col overflow-hidden">
-      {/* Fixed Header - Always at top */}
-      <div className="flex-shrink-0">
-        <Header 
-          agentName={headerAgentName} 
-          setOpen={setOpen} 
-          onReset={resetChat}
-          socketConnected={socketConnected}
-        />
-      </div>
-      {/* Scrollable Content Area */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+    <div className="w-full h-full bg-white flex flex-col overflow-hidden">
+      {/* Fixed Header - Always at top (unless hidden) */}
+      {!hideHeader && (
+        <div className="flex-shrink-0">
+          <Header 
+            agentName={headerAgentName} 
+            setOpen={setOpen} 
+            onReset={resetChat}
+            socketConnected={socketConnected}
+          />
+        </div>
+      )}
+      {/* Scrollable Content Area - Fixed Height */}
+      <div className="flex-1 overflow-y-auto min-h-0 bg-white">
         {!showChat ? (
-          <div className="flex flex-col justify-center items-center p-6 min-h-full bg-gradient-to-b from-white to-gray-50/30">
-            {/* Greeting Section */}
-            <div className="w-full px-6 pt-8 pb-6 bg-gradient-to-br from-[#ff21b0]/5 via-[#ff21b0]/2 to-transparent mb-6">
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                {t('greeting') || 'Hi there 👋'}
-              </h3>
-              <p className="text-base text-gray-600 font-medium">
-                {t('formInstruction') || 'How can we help?'}
-              </p>
-            </div>
-            
+          <div className="flex flex-col justify-center items-center p-6 min-h-full bg-white">
             {/* Form Section */}
             <div className="w-full space-y-4 max-w-md">
               <div>
@@ -814,7 +849,16 @@ const ChatInbox = ({
               
               <button 
                 onClick={startChatSession} 
-                className="w-full h-[48px] bg-gradient-to-r from-[#ff21b0] to-[#c24d99] text-white font-semibold rounded-xl hover:from-[#e91e9d] hover:to-[#b03d88] transition-all shadow-lg hover:shadow-xl mt-6"
+                className="w-full h-[48px] text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl mt-6"
+                style={{
+                  background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = `linear-gradient(to right, ${colors.dark}, ${colors.darker})`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`;
+                }}
               >
                 {t('continueButton') || 'Continue'}
               </button>
@@ -822,9 +866,9 @@ const ChatInbox = ({
           </div>
         ) : (
           <>
-            <div className="flex flex-col flex-1 min-h-0 relative">
-            <div className="flex-1 overflow-y-auto min-h-0">
-              <ChatMessages messages={messages} isAgentTyping={isAgentTyping} agentName={headerAgentName} />
+            <div className="flex flex-col flex-1 min-h-0 relative bg-white">
+            <div className="flex-1 overflow-y-auto min-h-0 bg-white">
+              <ChatMessages messages={messages} isAgentTyping={isAgentTyping} agentName={headerAgentName} businessLogo={businessLogo} widgetColor={widgetColor} />
             </div>
             <div className="flex-shrink-0 bg-white border-t border-gray-100 relative z-20">
               {defaultResponses.length > 0 && (
@@ -838,6 +882,7 @@ const ChatInbox = ({
                 setInput={setInput}
                 sendMessage={() => sendMessage()}
                 disabled={conversationStatus === 'closed'}
+                widgetColor={widgetColor}
               />
             </div>
           </div>
