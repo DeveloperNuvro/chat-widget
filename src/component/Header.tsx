@@ -33,7 +33,7 @@ const Header = ({
 
   return (
     <div 
-      className="w-full min-h-[70px] flex justify-between items-center rounded-t-[20px] px-4 sm:px-5 py-3 sm:py-4 shadow-lg"
+      className="w-full min-h-[70px] flex justify-between items-center rounded-t-[20px] px-4 sm:px-5 py-3 sm:py-4"
       style={{
         background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientMiddle}, ${colors.gradientEnd})`
       }}

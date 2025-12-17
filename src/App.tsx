@@ -21,6 +21,12 @@ const App: React.FC = () => {
   const { t } = useTranslation();
   const [open, setOpen] = useLocalStorage('chat_widget_open', false);
   const [activeTab, setActiveTab] = useState<TabType>('welcome');
+  
+  // Debug: Log activeTab changes
+  useEffect(() => {
+    console.log('[App] Active tab changed to:', activeTab);
+    console.log('[App] Tab content should be visible for:', activeTab);
+  }, [activeTab]);
   const [faqs, setFaqs] = useState<FAQ[]>([]);
   const [loadingFaqs, setLoadingFaqs] = useState(false);
   const [welcomeMessage, setWelcomeMessage] = useState<string>('');
@@ -140,9 +146,9 @@ const App: React.FC = () => {
 
   // If chat is open, show widget with tabs
   return (
-    <div className="w-full h-full bg-white rounded-[20px] shadow-2xl flex flex-col overflow-hidden">
-      {/* Universal Header */}
-      <div className="flex-shrink-0">
+    <div className="w-full h-full bg-white rounded-[20px] shadow-2xl flex flex-col" style={{ maxHeight: '100vh', height: '100vh', overflow: 'hidden' }}>
+      {/* Universal Header - Fixed for all tabs */}
+      <div className="flex-shrink-0 z-50 bg-white" style={{ position: 'sticky', top: 0 }}>
         <Header 
           agentName={headerAgentName || agentName} 
           setOpen={setOpen} 
@@ -204,121 +210,144 @@ const App: React.FC = () => {
       </div>
 
       {/* Tab Content - Fixed Height Container */}
-      <div className="flex-1 overflow-hidden flex flex-col bg-white">
+      <div className="flex-1 relative bg-white" style={{ minHeight: 0, overflow: 'hidden', flex: '1 1 auto' }}>
+        {/* Welcome Tab */}
         {activeTab === 'welcome' && (
-          <div className="flex-1 overflow-y-auto p-6 bg-white">
-            <div className="text-center mb-6">
-              <div 
-                className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
-                style={{
-                  background: `linear-gradient(to bottom right, ${colors.gradientStart}, ${colors.gradientEnd})`
-                }}
-              >
-                <HiChatBubbleLeftRight className="w-10 h-10 text-white" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">
-                {t('welcome.title')} 👋
-              </h2>
-              <p className="text-gray-600">
-                {welcomeMessage}
-              </p>
+          <div className="w-full h-full overflow-y-auto p-6 bg-white" style={{ zIndex: 10 }}>
+          <div className="text-center mb-6">
+            <div 
+              className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
+              style={{
+                background: `linear-gradient(to bottom right, ${colors.gradientStart}, ${colors.gradientEnd})`
+              }}
+            >
+              <HiChatBubbleLeftRight className="w-10 h-10 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">
+              {t('welcome.title')} 👋
+            </h2>
+            <p className="text-gray-600">
+              {welcomeMessage}
+            </p>
+          </div>
+          
+          <div className="space-y-3">
+            <div 
+              className="p-4 rounded-lg border"
+              style={{
+                background: `linear-gradient(to bottom right, ${colors.primary}10, ${colors.gradientEnd}10)`,
+                borderColor: `${colors.primary}33`
+              }}
+            >
+              <h3 className="font-semibold mb-2" style={{ color: colors.primary }}>
+                {t('welcome.howCanIHelp')}
+              </h3>
+              <ul className="space-y-2 text-sm text-gray-700">
+                <li>• {t('welcome.features.answerQuestions')}</li>
+                <li>• {t('welcome.features.helpRequests')}</li>
+                <li>• {t('welcome.features.provideInfo')}</li>
+                <li>• {t('welcome.features.assistSupport')}</li>
+              </ul>
             </div>
             
-            <div className="space-y-3">
-              <div 
-                className="p-4 rounded-lg border"
-                style={{
-                  background: `linear-gradient(to bottom right, ${colors.primary}10, ${colors.gradientEnd}10)`,
-                  borderColor: `${colors.primary}33`
-                }}
-              >
-                <h3 className="font-semibold mb-2" style={{ color: colors.primary }}>
-                  {t('welcome.howCanIHelp')}
-                </h3>
-                <ul className="space-y-2 text-sm text-gray-700">
-                  <li>• {t('welcome.features.answerQuestions')}</li>
-                  <li>• {t('welcome.features.helpRequests')}</li>
-                  <li>• {t('welcome.features.provideInfo')}</li>
-                  <li>• {t('welcome.features.assistSupport')}</li>
-                </ul>
-              </div>
-              
-              <button
-                onClick={() => setActiveTab('chat')}
-                className="w-full text-white py-3 rounded-lg font-semibold transition shadow-lg"
-                style={{
-                  background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = `linear-gradient(to right, ${colors.dark}, ${colors.darker})`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`;
-                }}
-              >
-                {t('welcome.startChatting')}
-              </button>
-            </div>
+            <button
+              onClick={() => setActiveTab('chat')}
+              className="w-full text-white py-3 rounded-lg font-semibold transition shadow-lg"
+              style={{
+                background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = `linear-gradient(to right, ${colors.dark}, ${colors.darker})`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`;
+              }}
+            >
+              {t('welcome.startChatting')}
+            </button>
           </div>
+        </div>
         )}
 
+        {/* Chat Tab */}
         {activeTab === 'chat' && (
-          <div className="flex-1 overflow-hidden bg-white">
-            <ChatInbox 
-              agentName={agentName} 
-              businessId={businessId} 
-              setOpen={setOpen}
-              hideHeader={true}
-              onSocketStatusChange={setSocketConnected}
-              onAgentNameChange={setHeaderAgentName}
-              onResetChatReady={(resetFn) => { resetChatRef.current = resetFn; }}
-              businessLogo={businessLogo}
-              widgetColor={widgetColor}
-            />
-          </div>
+          <div className="w-full h-full overflow-hidden bg-white" style={{ zIndex: 10 }}>
+          <ChatInbox 
+            agentName={agentName} 
+            businessId={businessId} 
+            setOpen={setOpen}
+            hideHeader={true}
+            onSocketStatusChange={setSocketConnected}
+            onAgentNameChange={setHeaderAgentName}
+            onResetChatReady={(resetFn) => { resetChatRef.current = resetFn; }}
+            businessLogo={businessLogo}
+            widgetColor={widgetColor}
+          />
+        </div>
         )}
 
+        {/* Help Tab */}
         {activeTab === 'help' && (
-          <div className="flex-1 overflow-y-auto p-4 bg-white">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">
-              {t('help.title')}
-            </h3>
-            
-            {loadingFaqs ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: colors.primary }}></div>
-              </div>
-            ) : faqs.length > 0 ? (
-              <div className="space-y-3">
-                {faqs.map((faq, index) => (
-                  <div
-                    key={index}
-                    className="bg-gray-50 rounded-lg p-4 border border-gray-200"
-                  >
-                    <h4 className="font-semibold text-gray-800 mb-2">
-                      {faq.question}
-                    </h4>
-                    <p className="text-sm text-gray-600 whitespace-pre-line">
-                      {faq.answer}
-                    </p>
+          <div className="w-full h-full overflow-y-auto p-4 bg-white" style={{ zIndex: 10, minHeight: '100%' }}>
+            <div className="h-full flex flex-col">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex-shrink-0">
+                {t('help.title')}
+              </h3>
+              
+              <div className="flex-1 overflow-y-auto">
+                {loadingFaqs ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: colors.primary }}></div>
                   </div>
-                ))}
+                ) : faqs.length > 0 ? (
+                  <div className="space-y-3">
+                    {faqs.map((faq, index) => (
+                      <div
+                        key={index}
+                        className="bg-gray-50 rounded-lg p-4 border border-gray-200"
+                      >
+                        <h4 className="font-semibold text-gray-800 mb-2">
+                          {faq.question}
+                        </h4>
+                        <p className="text-sm text-gray-600 whitespace-pre-line">
+                          {faq.answer}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <FaQuestionCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>{t('help.noFaqs')}</p>
+                    <button
+                      onClick={() => setActiveTab('chat')}
+                      className="mt-4 hover:underline"
+                      style={{ color: colors.primary }}
+                    >
+                      {t('help.startChatInstead')}
+                    </button>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <FaQuestionCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>{t('help.noFaqs')}</p>
-                <button
-                  onClick={() => setActiveTab('chat')}
-                  className="mt-4 hover:underline"
-                  style={{ color: colors.primary }}
-                >
-                  {t('help.startChatInstead')}
-                </button>
-              </div>
-            )}
+            </div>
           </div>
         )}
+      </div>
+
+      {/* Footer - Powered by Nuvro.ai */}
+      <div className="flex-shrink-0 border-t border-gray-200 bg-gray-50 px-4 py-2">
+        <div className="flex items-center justify-center">
+          <span className="text-xs text-gray-500 mr-1">{t('footer.poweredBy')}</span>
+          <a
+            href="https://nuvro.ai"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold hover:underline transition"
+            style={{ color: colors.primary }}
+          >
+            Nuvro.ai
+          </a>
+        </div>
       </div>
     </div>
   );

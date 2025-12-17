@@ -1,0 +1,42 @@
+{
+  "greeting": "হ্যালো!",
+  "formInstruction": "কথোপকথন চালিয়ে যেতে দয়া করে নীচের ফর্মটি পূরণ করুন।",
+  "namePlaceholder": "নাম",
+  "phonePlaceholder": "Whatsapp নম্বর",
+  "emailPlaceholder": "ইমেইল ঠিকানা",
+  "continueButton": "চালিয়ে যান",
+  "agentTyping": "মানব এজেন্ট টাইপ করছে...",
+  "startNewConversation": "নতুন কথোপকথন শুরু করুন",
+  "typingIndicator": "টাইপ করছে...",
+  "inputPlaceholder": "একটি বার্তা টাইপ করুন...",
+  "alert.fillAllFields": "অনুগ্রহ করে সব ক্ষেত্র পূরণ করুন",
+  "error.nameRequired": "নাম প্রয়োজন",
+  "error.invalidPhone": "অনুগ্রহ করে একটি বৈধ whatsapp নম্বর লিখুন",
+  "error.invalidEmail": "অনুগ্রহ করে একটি বৈধ ইমেইল ঠিকানা লিখুন",
+  "tabs": {
+    "welcome": "স্বাগতম",
+    "chat": "চ্যাট",
+    "help": "সাহায্য"
+  },
+  "welcome": {
+    "title": "স্বাগতম!",
+    "message": "হ্যালো! আমি {{agentName}}, আপনার AI সহায়ক। আজ আমি আপনাকে কীভাবে সাহায্য করতে পারি?",
+    "howCanIHelp": "আমি আপনাকে কীভাবে সাহায্য করতে পারি?",
+    "features": {
+      "answerQuestions": "আপনার প্রশ্নের উত্তর দিন",
+      "helpRequests": "আপনার অনুরোধে সাহায্য করুন",
+      "provideInfo": "তথ্য প্রদান করুন",
+      "assistSupport": "সাপোর্টে সহায়তা করুন"
+    },
+    "startChatting": "চ্যাটিং শুরু করুন"
+  },
+  "help": {
+    "title": "প্রায়শই জিজ্ঞাসিত প্রশ্ন",
+    "noFaqs": "এই মুহূর্তে কোন FAQ উপলব্ধ নেই।",
+    "startChatInstead": "পরিবর্তে একটি চ্যাট শুরু করুন"
+  },
+  "footer": {
+    "poweredBy": "চালিত হয়েছে"
+  }
+}
+

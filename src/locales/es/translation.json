@@ -34,5 +34,8 @@
     "title": "Preguntas Frecuentes",
     "noFaqs": "No hay preguntas frecuentes disponibles en este momento.",
     "startChatInstead": "Iniciar un chat en su lugar"
+  },
+  "footer": {
+    "poweredBy": "Desarrollado por"
   }
 }

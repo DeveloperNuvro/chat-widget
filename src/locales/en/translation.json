@@ -34,5 +34,8 @@
     "title": "Frequently Asked Questions",
     "noFaqs": "No FAQs available at the moment.",
     "startChatInstead": "Start a chat instead"
+  },
+  "footer": {
+    "poweredBy": "Powered by"
   }
 }
