@@ -25,8 +25,7 @@
     "features": {
       "answerQuestions": "আপনার প্রশ্নের উত্তর দিন",
       "helpRequests": "আপনার অনুরোধে সাহায্য করুন",
-      "provideInfo": "তথ্য প্রদান করুন",
-      "assistSupport": "সাপোর্টে সহায়তা করুন"
+      "provideInfo": "তথ্য প্রদান করুন"
     },
     "startChatting": "চ্যাটিং শুরু করুন"
   },

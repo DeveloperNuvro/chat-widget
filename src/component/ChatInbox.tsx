@@ -7,7 +7,6 @@ import { z } from 'zod';
 import toast from 'react-hot-toast';
 
 import ChatMessages, { Message } from './ChatMessages';
-import DefaultResponseTemplate from './DefaultResponseTemplate';
 import Header from './Header';
 import InputBox from './InputBox';
 import { useLocalStorage } from './useLocalStorage';
@@ -53,6 +52,7 @@ const ChatInbox = ({
   agentName: initialAgentName,
   setOpen,
   businessId,
+  agentId: agentIdProp = null,
   hideHeader = false,
   onSocketStatusChange,
   onAgentNameChange,
@@ -62,6 +62,8 @@ const ChatInbox = ({
 }: {
   agentName: string;
   businessId: string;
+  /** AI Agent ID – this agent's workflow runs on new chat (from widget config or URL) */
+  agentId?: string | null;
   setOpen: (isOpen: boolean) => void;
   hideHeader?: boolean;
   onSocketStatusChange?: (status: boolean) => void;
@@ -95,7 +97,12 @@ const ChatInbox = ({
   const [isAgentTyping, setIsAgentTyping] = useState(false); // This is ONLY for human agents
   const [socket, setSocket] = useState<Socket | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [defaultResponses, setDefaultResponses] = useState<{ question: string; answer: string }[]>([]);
+  /** Workflow config from create-session: when first_message, show language first without sending first message to backend */
+  const [workflowConfig, setWorkflowConfig] = useState<{
+    workflowActive: boolean;
+    workflowTrigger: 'first_message' | 'conversation_opened' | null;
+    firstStep: { message: string; options: { value: string; label: string }[] } | null;
+  }>({ workflowActive: false, workflowTrigger: null, firstStep: null });
   
   const [headerAgentName, setHeaderAgentName] = useState<string>(initialAgentName?.toString() ?? currentAgentName?.toString() ?? '');
 
@@ -115,7 +122,9 @@ const ChatInbox = ({
 
   const customerIdRef = useRef(customerId);
   useEffect(() => { customerIdRef.current = customerId; }, [customerId]);
-  
+  /** When user clicks a workflow tag we send value + displayText; socket echoes the same message – use this to replace optimistic bubble instead of adding a second one. */
+  const lastSentMessageValueRef = useRef<string | null>(null);
+
   // Sync refs with state
   useEffect(() => { lastMessageTimestampRef.current = lastMessageTimestamp; }, [lastMessageTimestamp]);
   useEffect(() => { socketConnectedRef.current = socketConnected; }, [socketConnected]);
@@ -126,12 +135,14 @@ const ChatInbox = ({
     email: z.string().email({ message: t('error.invalidEmail') }),
   });
 
+  const hasFetchedSessionRef = useRef<string | null>(null);
   const resetChat = useCallback(() => {
+    hasFetchedSessionRef.current = null;
     localStorage.removeItem(localStorageKey);
     setChatState(getInitialState());
     setInput('');
-    setDefaultResponses([]);
     setErrors({});
+    setWorkflowConfig({ workflowActive: false, workflowTrigger: null, firstStep: null });
   }, [localStorageKey, setChatState]);
 
   // Expose resetChat to parent
@@ -151,33 +162,64 @@ const ChatInbox = ({
     }
   }, [conversationStatus, setOpen, resetChat]);
 
-  // Initial message fetch when conversation starts
+  // Fetch messages when we have a session; sync workflowConfig from API so workflow OFF = no language step / no workflow UI
   useEffect(() => {
-    if (customerId && conversationId && messages.length === 0) {
-      publicApi.get(`/api/v1/customer/widget/messages/${customerId}`)
-        .then(res => {
-          if (res.data?.data?.data && Array.isArray(res.data.data.data)) {
-            const formattedMessages: Message[] = res.data.data.data.map((msg: any) => ({
-              text: msg.message,
+    if (!customerId || !conversationId) return;
+    const sessionKey = `${customerId}:${conversationId}`;
+    if (hasFetchedSessionRef.current === sessionKey) return;
+    hasFetchedSessionRef.current = sessionKey;
+
+    publicApi.get(`/api/v1/customer/widget/messages/${customerId}`)
+      .then(res => {
+        const payload = res.data?.data;
+        if (!payload) return;
+
+        // Always sync workflow status from backend. Prefer agent.workflowEnabled when API returns it so widget identifies workflow on/off from agent.
+        const workflowActive = payload.workflowEnabled !== undefined ? !!payload.workflowEnabled : !!payload.workflowActive;
+        const workflowTrigger = payload.workflowTrigger === 'first_message' || payload.workflowTrigger === 'conversation_opened' ? payload.workflowTrigger : null;
+        const firstStep = workflowActive && payload.firstStep?.message && Array.isArray(payload.firstStep?.options) ? payload.firstStep : null;
+        setWorkflowConfig({ workflowActive, workflowTrigger, firstStep });
+
+        if (payload.data && Array.isArray(payload.data)) {
+          const formattedMessages: Message[] = payload.data.map((msg: any) => {
+            const fromCustomer = msg.sender === 'customer' || msg.sender === 'user';
+            const text = fromCustomer
+              ? (msg.metadata?.displayText ?? msg.message ?? msg.text ?? '')
+              : (msg.message ?? msg.text ?? msg.metadata?.displayText ?? '');
+            return {
+              text,
               sender: msg.sender === 'customer' ? 'user' : (msg.sender === 'system' ? 'system' : 'bot'),
               type: 'text',
-              timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
-            })).reverse();
-            
-            // Set last message timestamp for polling
-            if (formattedMessages.length > 0) {
-              const lastMsg = formattedMessages[formattedMessages.length - 1];
-              if (lastMsg.timestamp) {
-                setLastMessageTimestamp(lastMsg.timestamp);
-              }
-            }
-            
-            setChatState(prev => ({ ...prev, messages: formattedMessages, showChat: true }));
+              timestamp: msg.timestamp ? new Date(msg.timestamp) : (msg.time ? new Date(msg.time) : new Date()),
+              _id: msg._id,
+              metadata: workflowActive && Array.isArray(msg.metadata?.workflowOptions) && msg.metadata.workflowOptions.length > 0
+                ? { workflowOptions: msg.metadata.workflowOptions }
+                : undefined,
+            };
+          }).reverse();
+
+          // Only show workflow first step (ask_language) when workflow is ACTIVE and conversation_opened
+          if (formattedMessages.length === 0 && workflowActive && workflowTrigger === 'conversation_opened' && firstStep) {
+            const botStepMessage: Message = {
+              text: firstStep.message,
+              sender: 'system',
+              type: 'text',
+              timestamp: new Date(),
+              _id: `workflow-init-${Date.now()}`,
+              metadata: { workflowOptions: firstStep.options },
+            };
+            formattedMessages.push(botStepMessage);
           }
-        })
-        .catch(() => resetChat());
-    }
-  }, [customerId, conversationId, messages.length, setChatState, resetChat]);
+
+          if (formattedMessages.length > 0) {
+            const lastMsg = formattedMessages[formattedMessages.length - 1];
+            if (lastMsg.timestamp) setLastMessageTimestamp(lastMsg.timestamp);
+          }
+          setChatState(prev => ({ ...prev, messages: formattedMessages, showChat: true }));
+        }
+      })
+      .catch(() => resetChat());
+  }, [customerId, conversationId, setChatState, resetChat]);
 
   // API polling fallback function to fetch new messages
   const fetchNewMessages = useCallback(async () => {
@@ -194,15 +236,30 @@ const ChatInbox = ({
         `/api/v1/customer/widget/messages/${customerId}?limit=50${timestampParam}`
       );
 
-      if (response.data?.data?.data && Array.isArray(response.data.data.data)) {
-        const newMessages: Message[] = response.data.data.data
-          .map((msg: any) => ({
-            text: msg.message,
+      const payload = response.data?.data;
+      if (payload?.workflowActive === false || payload?.workflowActive === true || payload?.workflowEnabled !== undefined) {
+        const workflowActive = payload.workflowEnabled !== undefined ? !!payload.workflowEnabled : !!payload.workflowActive;
+        const workflowTrigger = payload.workflowTrigger === 'first_message' || payload.workflowTrigger === 'conversation_opened' ? payload.workflowTrigger : null;
+        const firstStep = workflowActive && payload.firstStep?.message && Array.isArray(payload.firstStep?.options) ? payload.firstStep : null;
+        setWorkflowConfig({ workflowActive, workflowTrigger, firstStep });
+      }
+
+      if (payload?.data && Array.isArray(payload.data)) {
+        const newMessages: Message[] = payload.data
+          .map((msg: any) => {
+            const fromCustomer = msg.sender === 'customer' || msg.sender === 'user';
+            const text = fromCustomer
+              ? (msg.metadata?.displayText ?? msg.message ?? msg.text ?? '')
+              : (msg.message ?? msg.text ?? msg.metadata?.displayText ?? '');
+            return {
+            text,
             sender: msg.sender === 'customer' ? 'user' : (msg.sender === 'system' ? 'system' : 'bot'),
             type: 'text',
             timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
             _id: msg._id, // Use message ID to prevent duplicates
-          }))
+            metadata: msg.metadata?.workflowOptions ? { workflowOptions: msg.metadata.workflowOptions } : undefined,
+          };
+          })
           .filter((msg: any) => {
             // Filter out messages we already have
             return !messages.some((existingMsg: any) => {
@@ -540,26 +597,30 @@ const ChatInbox = ({
 
     const handleNewMessage = (payload: any) => {
       if (payload.sender === 'customer') { return; }
-      
-      if (payload.sender === 'agent' && payload.agentName) {
+      // AI and agent replies both show as bot; update header name when present
+      if ((payload.sender === 'agent' || payload.sender === 'ai') && payload.agentName) {
         setHeaderAgentName(payload.agentName);
-        // Notify parent of agent name change
-        if (onAgentNameChange) {
-          onAgentNameChange(payload.agentName);
-        }
+        if (onAgentNameChange) onAgentNameChange(payload.agentName);
       }
-      
       const senderType: Message['sender'] = payload.sender === 'system' ? 'system' : 'bot';
-      // Get timestamp from payload (could be timestamp, createdAt, or current time)
-      const messageTimestamp = payload.timestamp 
-        ? new Date(payload.timestamp) 
+      const messageTimestamp = payload.timestamp
+        ? new Date(payload.timestamp)
         : (payload.createdAt ? new Date(payload.createdAt) : new Date());
-      const newMessage: Message = { 
-        text: payload.message, 
-        sender: senderType, 
+      const workflowOptionsFromPayload = payload.metadata?.workflowOptions ?? payload.workflowOptions;
+      // For AI/bot/system: always show actual reply (payload.message). For customer: show displayText if present (e.g. workflow option label).
+      const isFromCustomer = payload.sender === 'customer' || payload.sender === 'user';
+      const messageText = isFromCustomer
+        ? (payload.metadata?.displayText ?? payload.message ?? '')
+        : (payload.message ?? payload.metadata?.displayText ?? '');
+      const newMessage: Message = {
+        text: messageText,
+        sender: senderType,
         type: 'text',
         timestamp: messageTimestamp,
-        _id: payload._id || payload.id, // Store message ID to prevent duplicates
+        _id: payload._id || payload.id,
+        metadata: Array.isArray(workflowOptionsFromPayload) && workflowOptionsFromPayload.length > 0
+          ? { workflowOptions: workflowOptionsFromPayload }
+          : undefined,
       };
 
       // Update last message timestamp
@@ -568,34 +629,30 @@ const ChatInbox = ({
       setChatState(prev => {
         // Check if message already exists (prevent duplicates from API polling)
         const messageExists = prev.messages.some((m: any) => {
-          // Check by ID first (most reliable)
-          if (m._id && newMessage._id && m._id === newMessage._id) {
-            return true;
-          }
-          
-          // Check by text and timestamp
+          if (m._id && newMessage._id && m._id === newMessage._id) return true;
           if (m.text === newMessage.text) {
-            const mTimestamp = m.timestamp instanceof Date 
-              ? m.timestamp 
-              : (typeof m.timestamp === 'string' ? new Date(m.timestamp) : null);
-            const newTimestamp = messageTimestamp instanceof Date 
-              ? messageTimestamp 
-              : (typeof messageTimestamp === 'string' ? new Date(messageTimestamp) : null);
-            
-            if (mTimestamp && newTimestamp && !isNaN(mTimestamp.getTime()) && !isNaN(newTimestamp.getTime())) {
-              return mTimestamp.getTime() === newTimestamp.getTime();
-            }
+            const mTimestamp = m.timestamp instanceof Date ? m.timestamp : (typeof m.timestamp === 'string' ? new Date(m.timestamp) : null);
+            const newTimestamp = messageTimestamp instanceof Date ? messageTimestamp : (typeof messageTimestamp === 'string' ? new Date(messageTimestamp) : null);
+            if (mTimestamp && newTimestamp && !isNaN(mTimestamp.getTime()) && !isNaN(newTimestamp.getTime()) && mTimestamp.getTime() === newTimestamp.getTime()) return true;
           }
-          
           return false;
         });
+        if (messageExists) return prev;
 
-        if (messageExists) {
-          return prev; // Don't add duplicate
+        // When we just sent a workflow option (value + label), socket echoes the same customer message – replace optimistic bubble instead of adding a second one
+        const sentValue = lastSentMessageValueRef.current;
+        if (isFromCustomer && sentValue !== null && (payload.message ?? '') === sentValue) {
+          lastSentMessageValueRef.current = null;
+          const optimisticIdx = prev.messages.findIndex((m: any) => m.sender === 'user' && m._id && String(m._id).startsWith('temp-'));
+          if (optimisticIdx !== -1) {
+            const messagesWithoutLoader = prev.messages.filter((m: any) => m.type !== 'loader');
+            const updated = [...messagesWithoutLoader];
+            updated[optimisticIdx] = { ...updated[optimisticIdx], _id: newMessage._id, text: newMessage.text };
+            return { ...prev, messages: updated };
+          }
         }
 
-        // This correctly replaces the AI loader with the AI's response
-        const messagesWithoutLoader = prev.messages.filter(m => m.type !== 'loader');
+        const messagesWithoutLoader = prev.messages.filter((m: any) => m.type !== 'loader');
         return { ...prev, messages: [...messagesWithoutLoader, newMessage] };
       });
     };
@@ -681,12 +738,22 @@ const ChatInbox = ({
       if (customerId && customerId.trim() !== '') {
         requestBody.customerId = customerId.trim();
       }
+      if (agentIdProp && agentIdProp.trim() !== '') {
+        requestBody.agentId = agentIdProp.trim();
+      }
       
       console.log('[Chat Widget] Creating chat session with:', { ...requestBody, email: requestBody.email }); // Log without sensitive data
       
       const response = await publicApi.post(`/api/v1/messages/create-chat-session`, requestBody);
-      const { customerId: newCustomerId, conversationId: newConversationId } = response.data.data;
+      const data = response.data?.data ?? {};
+      const { customerId: newCustomerId, conversationId: newConversationId, workflowActive, workflowTrigger, firstStep } = data;
       setErrors({});
+      const wfActive = data.workflowEnabled !== undefined ? !!data.workflowEnabled : !!workflowActive;
+      setWorkflowConfig({
+        workflowActive: wfActive,
+        workflowTrigger: workflowTrigger === 'first_message' || workflowTrigger === 'conversation_opened' ? workflowTrigger : null,
+        firstStep: wfActive && firstStep && firstStep.message && Array.isArray(firstStep.options) ? firstStep : null,
+      });
       setChatState(prev => ({ ...prev, customerId: newCustomerId, conversationId: newConversationId, showChat: true }));
     } catch (error: any) {
       console.error('[Chat Widget] Error creating chat session:', error);
@@ -700,42 +767,62 @@ const ChatInbox = ({
     }
   };
 
-  const sendMessage = async (messageToSend?: string) => {
+  const sendMessage = async (messageToSend?: string, displayText?: string) => {
     const text = (messageToSend || input).trim();
     if (!text || !businessId || !customerId) return;
 
     const messageTimestamp = new Date();
-    // Create a temporary ID for the optimistic message to help with duplicate prevention
+    const textToShow = displayText ?? text;
+    if (displayText !== undefined && displayText !== text) {
+      lastSentMessageValueRef.current = text;
+    }
     const tempId = `temp-${Date.now()}-${Math.random()}`;
     const userMessage: Message = { 
-      text, 
+      text: textToShow, 
       sender: 'user', 
       type: 'text',
       timestamp: messageTimestamp,
-      _id: tempId, // Temporary ID for duplicate prevention
+      _id: tempId,
     };
     let finalMessages: Message[] = [...messages, userMessage];
-    
-    // Update last message timestamp for user messages too
+
+    // Production-grade: when workflow is "first_message", first user message is NOT sent to backend – show language step locally.
+    const isFirstMessage = messages.length === 0;
+    const showWorkflowFirstStep = isFirstMessage && workflowConfig?.workflowActive && workflowConfig?.workflowTrigger === 'first_message' && workflowConfig?.firstStep;
+    if (showWorkflowFirstStep) {
+      const botStepMessage: Message = {
+        text: workflowConfig.firstStep!.message,
+        sender: 'system',
+        type: 'text',
+        timestamp: new Date(),
+        _id: `workflow-first-${Date.now()}`,
+        metadata: { workflowOptions: workflowConfig.firstStep!.options },
+      };
+      finalMessages.push(botStepMessage);
+      setLastMessageTimestamp(messageTimestamp);
+      setChatState(prev => ({ ...prev, messages: finalMessages }));
+      setInput('');
+      return; // Do not call API – user will click a language option next, which will be the first real API call
+    }
+
     setLastMessageTimestamp(messageTimestamp);
-    
-    // CRITICAL: Show the AI thinking loader ONLY when the conversation is in 'ai_only' mode.
-    // When a human agent is connected (status is 'live' or 'ticket'), this block is skipped,
-    // and no loader is displayed for user messages.
     if (conversationStatus === 'ai_only') {
       finalMessages.push({ text: '', sender: 'bot', type: 'loader' });
     }
-      
     setChatState(prev => ({ ...prev, messages: finalMessages }));
     setInput('');
 
     try {
-      const response = await publicApi.post(`/api/v1/messages/send`, {
+      const body: Record<string, unknown> = {
         message: text,
         businessId,
         customerId,
         agentName: initialAgentName,
-      });
+      };
+      if (displayText !== undefined && displayText !== text) {
+        body.displayText = displayText;
+      }
+      const response = await publicApi.post(`/api/v1/messages/send`, body);
       
       // If the response includes the message ID, update the optimistic message
       if (response.data?.data?._id) {
@@ -745,6 +832,10 @@ const ChatInbox = ({
             m._id === tempId ? { ...m, _id: response.data.data._id } : m
           )
         }));
+      }
+      // Fallback: poll for new messages after 2s so AI reply appears if socket missed it
+      if (conversationStatus === 'ai_only') {
+        setTimeout(() => fetchNewMessages(), 2000);
       }
     } catch (error) {
       toast.error('Failed to send message.');
@@ -756,24 +847,6 @@ const ChatInbox = ({
     }
   };
   
-  const handleDefaultResponseClick = (question: string, answer: string) => {
-    // Add question and answer directly to messages without sending to server
-    const userMessage: Message = { text: question, sender: 'user', type: 'text' };
-    const botMessage: Message = { text: answer, sender: 'bot', type: 'text' };
-    setChatState(prev => ({ 
-      ...prev, 
-      messages: [...prev.messages, userMessage, botMessage] 
-    }));
-  };
-  
-  useEffect(() => {
-    if (businessId && initialAgentName && showChat) {
-      publicApi.get(`/api/v1/business/${businessId}/${initialAgentName}/default-responses`)
-        .then(response => setDefaultResponses(response.data?.data?.defaultFAQResponses || []))
-        .catch(err => console.error('Error fetching default responses:', err));
-    }
-  }, [showChat, businessId, initialAgentName]);
-
   return (
     <div className="w-full h-full bg-white flex flex-col overflow-hidden">
       {/* Fixed Header - Always at top (unless hidden) */}
@@ -787,21 +860,22 @@ const ChatInbox = ({
           />
         </div>
       )}
-      {/* Scrollable Content Area - Fixed Height */}
-      <div className="flex-1 overflow-y-auto min-h-0 bg-white">
+      {/* Content: form scrolls when needed; chat has messages scroll + input fixed at bottom */}
+      <div
+        className={`flex-1 min-h-0 bg-white ${showChat ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}
+      >
         {!showChat ? (
-          <div className="flex flex-col justify-center items-center p-6 min-h-full bg-white">
-            {/* Form Section */}
-            <div className="w-full space-y-4 max-w-md">
+          <div className="flex flex-col justify-center items-center p-6 min-h-full bg-gradient-to-b from-gray-50/60 to-white">
+            <div className="w-full space-y-4 max-w-sm">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   {t('namePlaceholder') || 'Your Name'}
                 </label>
                 <input 
-                  className={`w-full h-[48px] px-4 border-2 outline-none rounded-xl text-sm transition-all bg-white ${
+                  className={`w-full h-12 px-4 border outline-none rounded-xl text-sm transition-all bg-white placeholder:text-gray-400 ${
                     errors.name 
-                      ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20' 
-                      : 'border-gray-200 focus:border-[#ff21b0] focus:ring-2 focus:ring-[#ff21b0]/20'
+                      ? 'border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20' 
+                      : 'border-gray-200 focus:border-gray-300 focus:ring-2 focus:ring-gray-200'
                   }`} 
                   type="text" 
                   placeholder={t('namePlaceholder') || 'Enter your name'} 
@@ -810,16 +884,15 @@ const ChatInbox = ({
                 />
                 {errors.name && <p className="text-red-500 text-xs mt-1.5">{errors.name}</p>}
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   {t('phonePlaceholder') || 'Phone Number'}
                 </label>
                 <input 
-                  className={`w-full h-[48px] px-4 border-2 outline-none rounded-xl text-sm transition-all bg-white ${
+                  className={`w-full h-12 px-4 border outline-none rounded-xl text-sm transition-all bg-white placeholder:text-gray-400 ${
                     errors.phone 
-                      ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20' 
-                      : 'border-gray-200 focus:border-[#ff21b0] focus:ring-2 focus:ring-[#ff21b0]/20'
+                      ? 'border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20' 
+                      : 'border-gray-200 focus:border-gray-300 focus:ring-2 focus:ring-gray-200'
                   }`} 
                   type="tel" 
                   placeholder={t('phonePlaceholder') || 'Enter your phone'} 
@@ -828,16 +901,15 @@ const ChatInbox = ({
                 />
                 {errors.phone && <p className="text-red-500 text-xs mt-1.5">{errors.phone}</p>}
               </div>
-              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   {t('emailPlaceholder') || 'Email Address'}
                 </label>
                 <input 
-                  className={`w-full h-[48px] px-4 border-2 outline-none rounded-xl text-sm transition-all bg-white ${
+                  className={`w-full h-12 px-4 border outline-none rounded-xl text-sm transition-all bg-white placeholder:text-gray-400 ${
                     errors.email 
-                      ? 'border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-500/20' 
-                      : 'border-gray-200 focus:border-[#ff21b0] focus:ring-2 focus:ring-[#ff21b0]/20'
+                      ? 'border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-500/20' 
+                      : 'border-gray-200 focus:border-gray-300 focus:ring-2 focus:ring-gray-200'
                   }`} 
                   type="email" 
                   placeholder={t('emailPlaceholder') || 'Enter your email'} 
@@ -846,18 +918,21 @@ const ChatInbox = ({
                 />
                 {errors.email && <p className="text-red-500 text-xs mt-1.5">{errors.email}</p>}
               </div>
-              
               <button 
+                type="button"
                 onClick={startChatSession} 
-                className="w-full h-[48px] text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl mt-6"
+                className="w-full h-12 text-white font-semibold text-sm rounded-xl transition-all duration-200 shadow-md hover:shadow-lg active:scale-[0.99] mt-6"
                 style={{
-                  background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`
+                  background: `linear-gradient(135deg, ${colors.gradientStart}, ${colors.gradientEnd})`,
+                  boxShadow: `0 4px 14px ${colors.primary}35`,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = `linear-gradient(to right, ${colors.dark}, ${colors.darker})`;
+                  e.currentTarget.style.background = `linear-gradient(135deg, ${colors.dark}, ${colors.darker})`;
+                  e.currentTarget.style.boxShadow = `0 6px 18px ${colors.primary}45`;
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`;
+                  e.currentTarget.style.background = `linear-gradient(135deg, ${colors.gradientStart}, ${colors.gradientEnd})`;
+                  e.currentTarget.style.boxShadow = `0 4px 14px ${colors.primary}35`;
                 }}
               >
                 {t('continueButton') || 'Continue'}
@@ -866,26 +941,28 @@ const ChatInbox = ({
           </div>
         ) : (
           <>
-            <div className="flex flex-col flex-1 min-h-0 relative bg-white">
-            <div className="flex-1 overflow-y-auto min-h-0 bg-white">
-              <ChatMessages messages={messages} isAgentTyping={isAgentTyping} agentName={headerAgentName} businessLogo={businessLogo} widgetColor={widgetColor} />
-            </div>
-            <div className="flex-shrink-0 bg-white border-t border-gray-100 relative z-20">
-              {defaultResponses.length > 0 && (
-                <DefaultResponseTemplate
-                  defaultResponses={defaultResponses}
-                  onSelect={handleDefaultResponseClick}
+            <div className="flex flex-col flex-1 min-h-0 relative bg-white overflow-hidden">
+              <div className="flex-1 overflow-y-auto min-h-0 chat-scroll">
+                <ChatMessages
+                  messages={messages}
+                  isAgentTyping={isAgentTyping}
+                  agentName={headerAgentName}
+                  businessLogo={businessLogo}
+                  widgetColor={widgetColor}
+                  workflowActive={workflowConfig.workflowActive}
+                  onWorkflowOptionSelect={(value, label) => sendMessage(value, label)}
                 />
-              )}
-              <InputBox
-                input={input}
-                setInput={setInput}
-                sendMessage={() => sendMessage()}
-                disabled={conversationStatus === 'closed'}
-                widgetColor={widgetColor}
-              />
+              </div>
+              <div className="flex-shrink-0 bg-white border-t border-gray-100 relative z-20 sticky bottom-0">
+                <InputBox
+                  input={input}
+                  setInput={setInput}
+                  sendMessage={() => sendMessage()}
+                  disabled={conversationStatus === 'closed'}
+                  widgetColor={widgetColor}
+                />
+              </div>
             </div>
-          </div>
           </>
         )}
       </div>

@@ -33,103 +33,99 @@ const Header = ({
 
   return (
     <div 
-      className="w-full min-h-[70px] flex justify-between items-center rounded-t-[20px] px-4 sm:px-5 py-3 sm:py-4"
+      className="w-full min-h-[64px] flex justify-between items-center px-4 sm:px-5 py-3"
       style={{
-        background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientMiddle}, ${colors.gradientEnd})`
+        background: `linear-gradient(135deg, ${colors.gradientStart}, ${colors.gradientMiddle}, ${colors.gradientEnd})`,
+        boxShadow: '0 1px 0 rgba(255,255,255,0.1)',
       }}
     >
-      <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+      <div className="flex items-center gap-3 flex-1 min-w-0">
         <div className="relative flex-shrink-0">
-          <div className="relative w-[44px] h-[44px] sm:w-[48px] sm:h-[48px] bg-white rounded-full flex items-center justify-center shadow-lg ring-2 ring-white/30 overflow-hidden">
+          <div className="relative w-11 h-11 sm:w-12 sm:h-12 bg-white rounded-xl flex items-center justify-center shadow-md ring-2 ring-white/40 overflow-hidden">
             {businessLogo ? (
               <>
                 <img 
                   src={businessLogo} 
-                  alt="Business Logo" 
-                  className="w-full h-full object-cover rounded-full"
+                  alt="Business" 
+                  className="w-full h-full object-cover rounded-xl"
                   onError={(e) => {
-                    // Hide image and show fallback
                     const target = e.target as HTMLImageElement;
                     target.style.display = 'none';
                     const parent = target.parentElement;
                     if (parent) {
                       const fallback = parent.querySelector('.logo-fallback') as HTMLElement;
-                      if (fallback) {
-                        fallback.style.display = 'flex';
-                      }
+                      if (fallback) fallback.style.display = 'flex';
                     }
                   }}
                 />
-                <div className="logo-fallback hidden absolute inset-0 items-center justify-center text-[20px] sm:text-[24px] text-[#ff21b0]">
-                  <PiRobot />
+                <div className="logo-fallback hidden absolute inset-0 items-center justify-center bg-gray-100 text-gray-500">
+                  <PiRobot className="w-6 h-6" />
                 </div>
               </>
             ) : (
-              <div className="text-[20px] sm:text-[24px] text-[#ff21b0]">
-                <PiRobot />
+              <div className="text-gray-500" style={{ color: colors.primary }}>
+                <PiRobot className="w-6 h-6" />
               </div>
             )}
           </div>
-          {/* Connection status indicator */}
           <div className={cn(
-            "absolute bottom-0 right-0 w-3 h-3 sm:w-4 sm:h-4 rounded-full border-[3px] border-white shadow-sm",
-            connectionStatus === 'online' ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
-          )} title={connectionStatus === 'online' ? 'Online' : 'Connecting...'} />
+            "absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white shadow-sm",
+            connectionStatus === 'online' ? 'bg-emerald-500' : 'bg-gray-400'
+          )} title={connectionStatus === 'online' ? 'Online' : 'Connecting...'} aria-hidden />
         </div>
         <div className="flex flex-col min-w-0 flex-1">
-          <div className="text-white font-bold tracking-tight text-sm sm:text-base truncate" title={agentName}>
+          <span className="text-white font-semibold text-sm sm:text-base truncate" title={agentName}>
             {agentName}
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className={cn(
+          </span>
+          <span className="text-white/85 text-xs font-medium flex items-center gap-1.5 mt-0.5">
+            <span className={cn(
               "w-1.5 h-1.5 rounded-full flex-shrink-0",
-              connectionStatus === 'online' ? 'bg-green-300' : 'bg-gray-300'
+              connectionStatus === 'online' ? 'bg-emerald-300' : 'bg-white/50'
             )} />
-            <div className="text-white/90 text-[10px] sm:text-xs font-medium whitespace-nowrap">
-              {connectionStatus === 'online' ? 'Online now' : 'Connecting...'}
-            </div>
-          </div>
+            {connectionStatus === 'online' ? 'Online now' : 'Connecting...'}
+          </span>
         </div>
       </div>
 
-      <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
-        {/* Language change Button */}
-        <div className="flex items-center bg-white/20 backdrop-blur-sm px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-semibold text-white space-x-1.5 sm:space-x-2 border border-white/30">
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center bg-white/15 backdrop-blur-sm px-2 py-1.5 rounded-lg border border-white/20 gap-0.5">
           <button 
+            type="button"
             onClick={() => changeLanguage('es')}
             className={cn(
-              "cursor-pointer transition-all px-1 sm:px-1.5 py-0.5 rounded whitespace-nowrap",
-              i18n.language === 'es' ? 'bg-white/30 text-white' : 'text-white/70 hover:text-white'
+              "cursor-pointer transition-all px-2 py-1 rounded-md text-xs font-medium whitespace-nowrap",
+              i18n.language === 'es' ? 'bg-white/25 text-white' : 'text-white/80 hover:text-white'
             )}
           >
             ES
           </button>
-          <div className="border-r border-white/30 h-3 sm:h-4"></div>
           <button 
+            type="button"
             onClick={() => changeLanguage('en')}
             className={cn(
-              "cursor-pointer transition-all px-1 sm:px-1.5 py-0.5 rounded whitespace-nowrap",
-              i18n.language === 'en' ? 'bg-white/30 text-white' : 'text-white/70 hover:text-white'
+              "cursor-pointer transition-all px-2 py-1 rounded-md text-xs font-medium whitespace-nowrap",
+              i18n.language === 'en' ? 'bg-white/25 text-white' : 'text-white/80 hover:text-white'
             )}
           >
             EN
           </button>
         </div>
-      
         <button 
+          type="button"
           title={t('startNewConversation')} 
-          className="text-white cursor-pointer hover:bg-white/20 transition-all p-1.5 sm:p-2 rounded-lg flex-shrink-0" 
+          className="text-white/90 hover:text-white hover:bg-white/15 transition-all p-2 rounded-lg flex-shrink-0" 
           onClick={onReset}
         >
-          <FaSyncAlt className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <FaSyncAlt className="w-4 h-4" />
         </button>
-
         <button 
-          className="text-white cursor-pointer hover:bg-white/20 transition-all p-1.5 sm:p-2 rounded-lg flex-shrink-0" 
+          type="button"
+          className="text-white/90 hover:text-white hover:bg-white/15 transition-all p-2 rounded-lg flex-shrink-0" 
           onClick={() => setOpen(false)}
           title="Minimize"
+          aria-label="Minimize chat"
         >
-          <FaRegWindowMinimize className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <FaRegWindowMinimize className="w-4 h-4" />
         </button>
       </div>
     </div>

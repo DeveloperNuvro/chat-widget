@@ -41,6 +41,8 @@ const App: React.FC = () => {
   const businessId = params.get('businessId') || '';
   const apiKey = params.get('apiKey') || '';
   const domainUrl = params.get('domainUrl') || '';
+  /** agentId from URL (optional) or from widget config – used so this agent's workflow runs on new chat */
+  const [agentId, setAgentId] = useState<string | null>(() => params.get('agentId') || null);
 
   // Initialize header agent name
   useEffect(() => {
@@ -96,6 +98,9 @@ const App: React.FC = () => {
         console.log('[Widget] Setting widget color:', response.data.data.widgetColor);
         setWidgetColor(response.data.data.widgetColor);
       }
+      if (response.data?.data?.agentId) {
+        setAgentId(response.data.data.agentId);
+      }
     } catch (error: any) {
       console.error('[Widget] Failed to fetch business logo:', error);
       // Silently fail - widget will use default icon
@@ -121,18 +126,29 @@ const App: React.FC = () => {
 
   const colors = getColorVariations(widgetColor);
 
-  // If the chat is closed, show the bubble
+  // If the chat is closed, show the floating bubble
   if (!open) {
     return (
       <div className="w-full h-full flex items-center justify-center">
-        <div
+        <button
+          type="button"
           id="chat-bubble"
           onClick={() => setOpen(true)}
-          style={{ backgroundColor: colors.primary }}
-          className='h-[50px] w-[50px] rounded-full flex items-center justify-center text-white text-3xl cursor-pointer shadow-lg hover:scale-110 transition-transform'
+          aria-label="Open chat"
+          className="h-14 w-14 rounded-full flex items-center justify-center text-white cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-2 focus:ring-offset-transparent"
+          style={{
+            background: `linear-gradient(135deg, ${colors.gradientStart}, ${colors.gradientEnd})`,
+            boxShadow: `0 4px 20px ${colors.primary}40, 0 8px 32px rgba(0,0,0,0.12)`,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.boxShadow = `0 6px 24px ${colors.primary}50, 0 12px 40px rgba(0,0,0,0.15)`;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.boxShadow = `0 4px 20px ${colors.primary}40, 0 8px 32px rgba(0,0,0,0.12)`;
+          }}
         >
-          💬
-        </div>
+          <HiChatBubbleLeftRight className="w-7 h-7" />
+        </button>
       </div>
     );
   }
@@ -146,9 +162,17 @@ const App: React.FC = () => {
 
   // If chat is open, show widget with tabs
   return (
-    <div className="w-full h-full bg-white rounded-[20px] shadow-2xl flex flex-col" style={{ maxHeight: '100vh', height: '100vh', overflow: 'hidden' }}>
+    <div 
+      className="w-full h-full bg-white flex flex-col overflow-hidden"
+      style={{ 
+        maxHeight: '100vh', 
+        height: '100vh', 
+        borderRadius: 'var(--chat-radius-xl, 1.5rem)',
+        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.04)',
+      }}
+    >
       {/* Universal Header - Fixed for all tabs */}
-      <div className="flex-shrink-0 z-50 bg-white" style={{ position: 'sticky', top: 0 }}>
+      <div className="flex-shrink-0 z-50 bg-white border-b border-gray-100/80" style={{ position: 'sticky', top: 0 }}>
         <Header 
           agentName={headerAgentName || agentName} 
           setOpen={setOpen} 
@@ -161,48 +185,51 @@ const App: React.FC = () => {
 
       {/* Tab Navigation */}
       <div 
-        className="px-4 pt-2 pb-2 flex-shrink-0"
+        className="px-3 pt-2 pb-2 flex-shrink-0"
         style={{
-          background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientMiddle}, ${colors.gradientEnd})`
+          background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientMiddle}, ${colors.gradientEnd})`,
         }}
       >
-        <div className="flex gap-2 border-b border-white/20">
+        <div className="flex gap-1 p-1 rounded-xl bg-white/10 backdrop-blur-sm">
             <button
+              type="button"
               onClick={() => setActiveTab('welcome')}
-              className={`flex-1 py-2 px-3 text-sm font-medium rounded-t-lg transition ${
+              className={`flex-1 py-2.5 px-3 text-sm font-medium rounded-lg transition-all duration-200 ${
                 activeTab === 'welcome'
-                  ? 'bg-white/20 text-white'
-                  : 'text-white/70 hover:text-white hover:bg-white/10'
+                  ? 'bg-white text-gray-800 shadow-sm'
+                  : 'text-white/90 hover:text-white hover:bg-white/15'
               }`}
             >
-              <div className="flex items-center justify-center gap-1.5">
-                <FaHome className="w-4 h-4" />
+              <div className="flex items-center justify-center gap-2">
+                <FaHome className="w-4 h-4 shrink-0" />
                 <span className="hidden sm:inline">{t('tabs.welcome')}</span>
               </div>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('chat')}
-              className={`flex-1 py-2 px-3 text-sm font-medium rounded-t-lg transition ${
+              className={`flex-1 py-2.5 px-3 text-sm font-medium rounded-lg transition-all duration-200 ${
                 activeTab === 'chat'
-                  ? 'bg-white/20 text-white'
-                  : 'text-white/70 hover:text-white hover:bg-white/10'
+                  ? 'bg-white text-gray-800 shadow-sm'
+                  : 'text-white/90 hover:text-white hover:bg-white/15'
               }`}
             >
-              <div className="flex items-center justify-center gap-1.5">
-                <HiChatBubbleLeftRight className="w-4 h-4" />
+              <div className="flex items-center justify-center gap-2">
+                <HiChatBubbleLeftRight className="w-4 h-4 shrink-0" />
                 <span className="hidden sm:inline">{t('tabs.chat')}</span>
               </div>
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('help')}
-              className={`flex-1 py-2 px-3 text-sm font-medium rounded-t-lg transition ${
+              className={`flex-1 py-2.5 px-3 text-sm font-medium rounded-lg transition-all duration-200 ${
                 activeTab === 'help'
-                  ? 'bg-white/20 text-white'
-                  : 'text-white/70 hover:text-white hover:bg-white/10'
+                  ? 'bg-white text-gray-800 shadow-sm'
+                  : 'text-white/90 hover:text-white hover:bg-white/15'
               }`}
             >
-              <div className="flex items-center justify-center gap-1.5">
-                <FaQuestionCircle className="w-4 h-4" />
+              <div className="flex items-center justify-center gap-2">
+                <FaQuestionCircle className="w-4 h-4 shrink-0" />
                 <span className="hidden sm:inline">{t('tabs.help')}</span>
               </div>
             </button>
@@ -213,60 +240,66 @@ const App: React.FC = () => {
       <div className="flex-1 relative bg-white" style={{ minHeight: 0, overflow: 'hidden', flex: '1 1 auto' }}>
         {/* Welcome Tab */}
         {activeTab === 'welcome' && (
-          <div className="w-full h-full overflow-y-auto p-6 bg-white" style={{ zIndex: 10 }}>
-          <div className="text-center mb-6">
-            <div 
-              className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
-              style={{
-                background: `linear-gradient(to bottom right, ${colors.gradientStart}, ${colors.gradientEnd})`
-              }}
-            >
-              <HiChatBubbleLeftRight className="w-10 h-10 text-white" />
+          <div className="w-full h-full overflow-y-auto chat-scroll p-6 bg-gradient-to-b from-gray-50/60 to-white" style={{ zIndex: 10 }}>
+            <div className="max-w-sm mx-auto">
+              <div className="text-center mb-8">
+                <div 
+                  className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg ring-4 ring-white"
+                  style={{
+                    background: `linear-gradient(135deg, ${colors.gradientStart}, ${colors.gradientEnd})`,
+                    boxShadow: `0 8px 24px ${colors.primary}30`,
+                  }}
+                >
+                  <HiChatBubbleLeftRight className="w-10 h-10 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 mb-2">
+                  {t('welcome.title')} 👋
+                </h2>
+                <p className="text-sm text-gray-600 leading-relaxed">
+                  {welcomeMessage}
+                </p>
+              </div>
+              
+              <div className="space-y-4">
+                <div 
+                  className="p-5 rounded-2xl border bg-white/80 backdrop-blur-sm"
+                  style={{
+                    borderColor: `${colors.primary}20`,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                  }}
+                >
+                  <h3 className="font-semibold text-gray-900 mb-3 text-sm" style={{ color: colors.primary }}>
+                    {t('welcome.howCanIHelp')}
+                  </h3>
+                  <ul className="space-y-2.5 text-sm text-gray-600">
+                    <li className="flex items-start gap-2"><span className="text-gray-400 mt-0.5">•</span> {t('welcome.features.answerQuestions')}</li>
+                    <li className="flex items-start gap-2"><span className="text-gray-400 mt-0.5">•</span> {t('welcome.features.helpRequests')}</li>
+                    <li className="flex items-start gap-2"><span className="text-gray-400 mt-0.5">•</span> {t('welcome.features.provideInfo')}</li>
+                  </ul>
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('chat')}
+                  className="w-full text-white py-3.5 rounded-xl font-semibold text-sm transition-all duration-200 shadow-lg hover:shadow-xl active:scale-[0.99]"
+                  style={{
+                    background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`,
+                    boxShadow: `0 4px 14px ${colors.primary}40`,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = `linear-gradient(to right, ${colors.dark}, ${colors.darker})`;
+                    e.currentTarget.style.boxShadow = `0 6px 20px ${colors.primary}50`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`;
+                    e.currentTarget.style.boxShadow = `0 4px 14px ${colors.primary}40`;
+                  }}
+                >
+                  {t('welcome.startChatting')}
+                </button>
+              </div>
             </div>
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">
-              {t('welcome.title')} 👋
-            </h2>
-            <p className="text-gray-600">
-              {welcomeMessage}
-            </p>
           </div>
-          
-          <div className="space-y-3">
-            <div 
-              className="p-4 rounded-lg border"
-              style={{
-                background: `linear-gradient(to bottom right, ${colors.primary}10, ${colors.gradientEnd}10)`,
-                borderColor: `${colors.primary}33`
-              }}
-            >
-              <h3 className="font-semibold mb-2" style={{ color: colors.primary }}>
-                {t('welcome.howCanIHelp')}
-              </h3>
-              <ul className="space-y-2 text-sm text-gray-700">
-                <li>• {t('welcome.features.answerQuestions')}</li>
-                <li>• {t('welcome.features.helpRequests')}</li>
-                <li>• {t('welcome.features.provideInfo')}</li>
-                <li>• {t('welcome.features.assistSupport')}</li>
-              </ul>
-            </div>
-            
-            <button
-              onClick={() => setActiveTab('chat')}
-              className="w-full text-white py-3 rounded-lg font-semibold transition shadow-lg"
-              style={{
-                background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = `linear-gradient(to right, ${colors.dark}, ${colors.darker})`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`;
-              }}
-            >
-              {t('welcome.startChatting')}
-            </button>
-          </div>
-        </div>
         )}
 
         {/* Chat Tab */}
@@ -274,7 +307,8 @@ const App: React.FC = () => {
           <div className="w-full h-full overflow-hidden bg-white" style={{ zIndex: 10 }}>
           <ChatInbox 
             agentName={agentName} 
-            businessId={businessId} 
+            businessId={businessId}
+            agentId={agentId}
             setOpen={setOpen}
             hideHeader={true}
             onSocketStatusChange={setSocketConnected}
@@ -288,61 +322,62 @@ const App: React.FC = () => {
 
         {/* Help Tab */}
         {activeTab === 'help' && (
-          <div className="w-full h-full overflow-y-auto p-4 bg-white" style={{ zIndex: 10, minHeight: '100%' }}>
-            <div className="h-full flex flex-col">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex-shrink-0">
+          <div className="w-full h-full overflow-y-auto chat-scroll p-5 bg-gradient-to-b from-gray-50/60 to-white" style={{ zIndex: 10, minHeight: '100%' }}>
+            <div className="max-w-sm mx-auto">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">
                 {t('help.title')}
               </h3>
               
-              <div className="flex-1 overflow-y-auto">
-                {loadingFaqs ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: colors.primary }}></div>
-                  </div>
-                ) : faqs.length > 0 ? (
-                  <div className="space-y-3">
-                    {faqs.map((faq, index) => (
-                      <div
-                        key={index}
-                        className="bg-gray-50 rounded-lg p-4 border border-gray-200"
-                      >
-                        <h4 className="font-semibold text-gray-800 mb-2">
-                          {faq.question}
-                        </h4>
-                        <p className="text-sm text-gray-600 whitespace-pre-line">
-                          {faq.answer}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <FaQuestionCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                    <p>{t('help.noFaqs')}</p>
-                    <button
-                      onClick={() => setActiveTab('chat')}
-                      className="mt-4 hover:underline"
-                      style={{ color: colors.primary }}
+              {loadingFaqs ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-200 border-t-transparent" style={{ borderTopColor: colors.primary }} />
+                </div>
+              ) : faqs.length > 0 ? (
+                <div className="space-y-3">
+                  {faqs.map((faq, index) => (
+                    <div
+                      key={index}
+                      className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
                     >
-                      {t('help.startChatInstead')}
-                    </button>
+                      <h4 className="font-medium text-gray-900 mb-2 text-sm">
+                        {faq.question}
+                      </h4>
+                      <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">
+                        {faq.answer}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                    <FaQuestionCircle className="w-7 h-7 text-gray-400" />
                   </div>
-                )}
-              </div>
+                  <p className="text-sm text-gray-500 mb-4">{t('help.noFaqs')}</p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('chat')}
+                    className="text-sm font-medium px-4 py-2 rounded-xl hover:opacity-90 transition-opacity"
+                    style={{ color: colors.primary, background: `${colors.primary}15` }}
+                  >
+                    {t('help.startChatInstead')}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      {/* Footer - Powered by Nuvro.ai */}
-      <div className="flex-shrink-0 border-t border-gray-200 bg-gray-50 px-4 py-2">
-        <div className="flex items-center justify-center">
-          <span className="text-xs text-gray-500 mr-1">{t('footer.poweredBy')}</span>
+      {/* Footer - Powered by */}
+      <div className="flex-shrink-0 border-t border-gray-100 bg-gray-50/80 px-4 py-2.5">
+        <div className="flex items-center justify-center gap-1">
+          <span className="text-xs text-gray-500">{t('footer.poweredBy')}</span>
           <a
             href="https://nuvro.ai"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs font-semibold hover:underline transition"
+            className="text-xs font-semibold hover:opacity-80 transition-opacity"
             style={{ color: colors.primary }}
           >
             Nuvro.ai

@@ -14,6 +14,8 @@ export interface Message {
   type?: 'loader' | 'text';
   timestamp?: Date;
   _id?: string;
+  /** Workflow ask_question options – show as quick-reply buttons (value sent on click) */
+  metadata?: { workflowOptions?: { value: string; label: string }[] };
 }
 
 interface ChatMessagesProps {
@@ -22,6 +24,10 @@ interface ChatMessagesProps {
   agentName?: string;
   businessLogo?: string | null;
   widgetColor?: string;
+  /** When false, hide language select and all workflow step options (production: workflow OFF) */
+  workflowActive?: boolean;
+  /** When user taps a workflow option (e.g. language/category) – options are shown as message-style chips */
+  onWorkflowOptionSelect?: (value: string, label: string) => void;
 }
 
 // Helper function to format timestamp
@@ -85,7 +91,7 @@ const isSameDay = (date1: Date | string | null, date2: Date | string | null): bo
   return d1.toDateString() === d2.toDateString();
 };
 
-const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widgetColor = '#ff21b0' }: ChatMessagesProps) => {
+const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widgetColor = '#ff21b0', workflowActive = true, onWorkflowOptionSelect }: ChatMessagesProps) => {
   const bottomRef = useRef<HTMLDivElement>(null);
   const colors = getColorVariations(widgetColor);
 
@@ -93,10 +99,11 @@ const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widget
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isAgentTyping]);
 
-  // Using your original JSX and class names
   return (
-    <div className="flex flex-col gap-1 scrollbar-hide h-[350px] px-4 overflow-y-auto pt-6 pb-4 bg-gradient-to-b from-gray-50/50 to-white">
+    <div className="flex flex-col gap-1 chat-scroll flex-1 min-h-0 px-4 overflow-y-auto pt-5 pb-4 bg-[#f8fafc]">
       {messages?.map((msg, index) => {
+        // When workflow is OFF: hide workflow steps (language select, ask_question options)
+        if (msg.sender === 'system' && !workflowActive) return null;
         // Use _id as key if available, otherwise use index + text + timestamp for uniqueness
         const messageKey = (msg as any)._id || `msg-${index}-${msg.text}-${msg.timestamp?.getTime() || Date.now()}`;
         
@@ -109,10 +116,67 @@ const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widget
           msg.sender !== 'system';
 
         if (msg.sender === 'system') {
+            const workflowOptions = workflowActive ? (msg as Message).metadata?.workflowOptions : undefined;
             return (
-                <div key={messageKey} className="flex items-center justify-center my-2 animate-fade-in">
-                    <div className="text-center text-xs px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600">
-                        <FormattedText text={msg.text} />
+                <div key={messageKey} className="mb-4 animate-fade-in">
+                    <div className="flex items-end gap-2.5">
+                        <div
+                            className="relative w-9 h-9 rounded-full flex items-center justify-center text-white flex-shrink-0 overflow-hidden ring-2 ring-white shadow-sm"
+                            style={{
+                                background: `linear-gradient(135deg, ${colors.gradientStart}, ${colors.gradientEnd})`
+                            }}
+                        >
+                            {businessLogo ? (
+                                <>
+                                    <img src={businessLogo} alt="Business" className="w-full h-full object-cover rounded-full" onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                        const parent = target.parentElement;
+                                        if (parent) {
+                                            const fallback = parent.querySelector('.logo-fallback') as HTMLElement;
+                                            if (fallback) fallback.style.display = 'flex';
+                                        }
+                                    }} />
+                                    <div className="logo-fallback hidden absolute inset-0 items-center justify-center bg-gray-100">
+                                        <PiRobot className="w-4 h-4 text-gray-500" />
+                                    </div>
+                                </>
+                            ) : (
+                                <PiRobot className="w-4 h-4" />
+                            )}
+                        </div>
+                        <div className="flex flex-col gap-2.5 max-w-[82%]">
+                            <div className="px-4 py-3 text-sm break-words rounded-2xl rounded-bl-md chat-bubble-bot bg-white text-gray-800 border border-gray-100/80">
+                                <FormattedText text={msg.text} className="text-gray-800 leading-relaxed" />
+                            </div>
+                            {Array.isArray(workflowOptions) && workflowOptions.length > 0 && onWorkflowOptionSelect && (
+                                <div className="flex flex-wrap gap-2.5">
+                                    {workflowOptions.map((opt, idx) => (
+                                        <button
+                                            key={idx}
+                                            type="button"
+                                            className="chat-chip cursor-pointer px-4 py-2.5 text-sm font-semibold rounded-full border-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg"
+                                            style={{
+                                                background: `linear-gradient(135deg, ${colors.primary}18, ${colors.primary}08)`,
+                                                borderColor: `${colors.primary}50`,
+                                                color: colors.dark,
+                                            }}
+                                            onMouseEnter={(e) => {
+                                                e.currentTarget.style.background = `linear-gradient(135deg, ${colors.primary}28, ${colors.primary}15)`;
+                                                e.currentTarget.style.borderColor = colors.primary;
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.background = `linear-gradient(135deg, ${colors.primary}18, ${colors.primary}08)`;
+                                                e.currentTarget.style.borderColor = `${colors.primary}50`;
+                                            }}
+                                            onClick={() => onWorkflowOptionSelect(opt.value, opt.label)}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             );
@@ -121,10 +185,10 @@ const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widget
             <div key={messageKey}>
               {/* Date Separator */}
               {showDateSeparator && msg.timestamp && (
-                <div className="flex items-center justify-center my-4">
-                  <div className="text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+                <div className="flex items-center justify-center my-5">
+                  <span className="text-xs font-medium text-gray-400 bg-white/90 border border-gray-100 px-3 py-1.5 rounded-full shadow-sm">
                     {formatDate(msg.timestamp)}
-                  </div>
+                  </span>
                 </div>
               )}
               
@@ -136,33 +200,26 @@ const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widget
               >
               {
                   msg.type === "loader" ? (
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start gap-2.5 mb-4 animate-fade-in">
                     <div 
-                      className="relative w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-md overflow-hidden"
+                      className="relative w-9 h-9 rounded-full flex items-center justify-center text-white flex-shrink-0 overflow-hidden ring-2 ring-white shadow-sm"
                       style={{
-                        background: `linear-gradient(to bottom right, ${colors.gradientStart}, ${colors.gradientEnd})`
+                        background: `linear-gradient(135deg, ${colors.gradientStart}, ${colors.gradientEnd})`
                       }}
                     >
                       {businessLogo ? (
                         <>
-                          <img 
-                            src={businessLogo} 
-                            alt="Business Logo" 
-                            className="w-full h-full object-cover rounded-full"
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              const parent = target.parentElement;
-                              if (parent) {
-                                const fallback = parent.querySelector('.logo-fallback') as HTMLElement;
-                                if (fallback) {
-                                  fallback.style.display = 'flex';
-                                }
-                              }
-                            }}
-                          />
-                          <div className="logo-fallback hidden absolute inset-0 items-center justify-center">
-                            <PiRobot className="w-4 h-4" />
+                          <img src={businessLogo} alt="Business" className="w-full h-full object-cover rounded-full" onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              const fallback = parent.querySelector('.logo-fallback') as HTMLElement;
+                              if (fallback) fallback.style.display = 'flex';
+                            }
+                          }} />
+                          <div className="logo-fallback hidden absolute inset-0 items-center justify-center bg-gray-100">
+                            <PiRobot className="w-4 h-4 text-gray-500" />
                           </div>
                         </>
                       ) : (
@@ -173,35 +230,27 @@ const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widget
                   </div>
                   ) :
                   (
-                      <div className="flex items-end gap-2 max-w-[85%] group">
-                        {/* Avatar for bot messages */}
+                      <div className="flex items-end gap-2.5 max-w-[82%] group">
                         {msg.sender === 'bot' && (
                           <div 
-                            className="relative w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-md flex-shrink-0 mb-1 overflow-hidden"
+                            className="relative w-9 h-9 rounded-full flex items-center justify-center text-white flex-shrink-0 overflow-hidden ring-2 ring-white shadow-sm"
                             style={{
-                              background: `linear-gradient(to bottom right, ${colors.gradientStart}, ${colors.gradientEnd})`
+                              background: `linear-gradient(135deg, ${colors.gradientStart}, ${colors.gradientEnd})`
                             }}
                           >
                             {businessLogo ? (
                               <>
-                                <img 
-                                  src={businessLogo} 
-                                  alt="Business Logo" 
-                                  className="w-full h-full object-cover rounded-full"
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.display = 'none';
-                                    const parent = target.parentElement;
-                                    if (parent) {
-                                      const fallback = parent.querySelector('.logo-fallback') as HTMLElement;
-                                      if (fallback) {
-                                        fallback.style.display = 'flex';
-                                      }
-                                    }
-                                  }}
-                                />
-                                <div className="logo-fallback hidden absolute inset-0 items-center justify-center">
-                                  <PiRobot className="w-4 h-4" />
+                                <img src={businessLogo} alt="Business" className="w-full h-full object-cover rounded-full" onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = 'none';
+                                  const parent = target.parentElement;
+                                  if (parent) {
+                                    const fallback = parent.querySelector('.logo-fallback') as HTMLElement;
+                                    if (fallback) fallback.style.display = 'flex';
+                                  }
+                                }} />
+                                <div className="logo-fallback hidden absolute inset-0 items-center justify-center bg-gray-100">
+                                  <PiRobot className="w-4 h-4 text-gray-500" />
                                 </div>
                               </>
                             ) : (
@@ -212,54 +261,75 @@ const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widget
                         
                         <div className="flex flex-col">
                           <div
-                              className={cn(
-                                  'px-4 py-3 text-sm break-words rounded-2xl shadow-sm transition-all duration-200',
-                                  'hover:shadow-md',
-                                  msg.sender === 'user'
-                                  ? 'text-white rounded-br-md'
-                                  : 'bg-white text-gray-800 rounded-bl-md border border-gray-100'
-                              )}
-                              style={msg.sender === 'user' ? {
-                                background: `linear-gradient(to right, ${colors.gradientStart}, ${colors.gradientEnd})`
-                              } : {}}
+                            className={cn(
+                              'px-4 py-3 text-sm break-words rounded-2xl transition-all duration-200',
+                              msg.sender === 'user'
+                                ? 'text-white rounded-br-md chat-bubble-user'
+                                : 'bg-white text-gray-800 rounded-bl-md border border-gray-100/80 chat-bubble-bot'
+                            )}
+                            style={msg.sender === 'user' ? {
+                              background: `linear-gradient(135deg, ${colors.gradientStart}, ${colors.gradientEnd})`,
+                              boxShadow: `0 1px 3px ${colors.primary}25`,
+                            } : {}}
                           >
-                              <FormattedText 
-                                text={msg.text} 
-                                className={msg.sender === 'user' ? 'text-white' : 'text-gray-800'}
-                              />
+                            <FormattedText 
+                              text={msg.text} 
+                              className={cn('leading-relaxed', msg.sender === 'user' ? 'text-white' : 'text-gray-800')}
+                            />
                           </div>
-                          {msg.timestamp && (
-                              <div className={cn(
-                                'flex items-center gap-1.5 mt-1.5 px-1',
-                                msg.sender === 'user' ? 'justify-end' : 'justify-start'
-                              )}>
-                                {msg.sender === 'bot' && (
-                                  <span className="text-xs font-medium text-gray-500">
-                                    {agentName || 'AI'}
-                                  </span>
-                                )}
-                                <span
-                                    className={cn(
-                                        'text-xs',
-                                        msg.sender === 'user' ? 'text-gray-500' : 'text-gray-400'
-                                    )}
+                          {msg.sender === 'bot' && workflowActive && Array.isArray((msg as Message).metadata?.workflowOptions) && (msg as Message).metadata!.workflowOptions!.length > 0 && onWorkflowOptionSelect && (
+                            <div className="flex flex-wrap gap-2.5 mt-2">
+                              {(msg as Message).metadata!.workflowOptions!.map((opt: { value: string; label: string }, idx: number) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  className="chat-chip cursor-pointer px-4 py-2.5 text-sm font-semibold rounded-full border-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shadow-md hover:shadow-lg"
+                                  style={{
+                                    background: `linear-gradient(135deg, ${colors.primary}18, ${colors.primary}08)`,
+                                    borderColor: `${colors.primary}50`,
+                                    color: colors.dark,
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = `linear-gradient(135deg, ${colors.primary}28, ${colors.primary}15)`;
+                                    e.currentTarget.style.borderColor = colors.primary;
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = `linear-gradient(135deg, ${colors.primary}18, ${colors.primary}08)`;
+                                    e.currentTarget.style.borderColor = `${colors.primary}50`;
+                                  }}
+                                  onClick={() => onWorkflowOptionSelect(opt.value, opt.label)}
                                 >
-                                    {formatTime(msg.timestamp)}
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {msg.timestamp && (
+                            <div className={cn(
+                              'flex items-center gap-1.5 mt-1.5 px-1',
+                              msg.sender === 'user' ? 'justify-end' : 'justify-start'
+                            )}>
+                              {msg.sender === 'bot' && (
+                                <span className="text-[11px] font-medium text-gray-400">
+                                  {agentName || 'AI'}
                                 </span>
-                                {/* Message status indicator for user messages */}
-                                {msg.sender === 'user' && (
-                                  <span className="text-xs text-gray-400">
-                                    ✓
-                                  </span>
-                                )}
-                              </div>
+                              )}
+                              <span className={cn(
+                                'text-[11px]',
+                                msg.sender === 'user' ? 'text-gray-400' : 'text-gray-400'
+                              )}>
+                                {formatTime(msg.timestamp)}
+                              </span>
+                              {msg.sender === 'user' && (
+                                <span className="text-[11px] text-gray-400">✓</span>
+                              )}
+                            </div>
                           )}
                         </div>
                         
-                        {/* Avatar for user messages */}
                         {msg.sender === 'user' && (
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-400 to-gray-500 flex items-center justify-center text-white text-xs font-bold shadow-md flex-shrink-0 mb-1">
-                            <span className="text-xs">You</span>
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center text-white text-[10px] font-semibold shadow-sm flex-shrink-0 ring-2 ring-white">
+                            You
                           </div>
                         )}
                       </div>
@@ -271,10 +341,8 @@ const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widget
       })}
 
       {isAgentTyping && (
-        <div className="flex justify-start">
-          <div className="bg-gray-200 dark:bg-gray-700 rounded-lg">
-            <TypingLoader widgetColor={widgetColor} />
-          </div>
+        <div className="flex justify-start mb-4">
+          <TypingLoader widgetColor={widgetColor} />
         </div>
       )}
 

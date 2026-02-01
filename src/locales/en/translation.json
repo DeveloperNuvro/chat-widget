@@ -25,8 +25,7 @@
     "features": {
       "answerQuestions": "Answer your questions",
       "helpRequests": "Help with your requests",
-      "provideInfo": "Provide information",
-      "assistSupport": "Assist with support"
+      "provideInfo": "Provide information"
     },
     "startChatting": "Start Chatting"
   },
