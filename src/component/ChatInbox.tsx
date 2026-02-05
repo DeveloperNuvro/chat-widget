@@ -33,6 +33,23 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl();
 
+/** Play a short, subtle notification sound for new incoming messages (production-grade UX). Uses Web Audio API so no asset is required. */
+function playNewMessageSound() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 800;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.08, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.15);
+  } catch (_) {}
+}
+
 interface ChatState {
   showChat: boolean;
   name: string;
@@ -56,6 +73,7 @@ const ChatInbox = ({
   hideHeader = false,
   onSocketStatusChange,
   onAgentNameChange,
+  onHeaderStateChange,
   onResetChatReady,
   businessLogo = null,
   widgetColor = '#ff21b0',
@@ -68,6 +86,8 @@ const ChatInbox = ({
   hideHeader?: boolean;
   onSocketStatusChange?: (status: boolean) => void;
   onAgentNameChange?: (name: string) => void;
+  /** Full header state for universal Header (agent name, channel name, status) */
+  onHeaderStateChange?: (state: { agentName: string; channelName: string | null; conversationStatus: 'ai_only' | 'live' | 'ticket' | 'closed' }) => void;
   onResetChatReady?: (resetFn: () => void) => void;
   businessLogo?: string | null;
   widgetColor?: string;
@@ -105,13 +125,22 @@ const ChatInbox = ({
   }>({ workflowActive: false, workflowTrigger: null, firstStep: null });
   
   const [headerAgentName, setHeaderAgentName] = useState<string>(initialAgentName?.toString() ?? currentAgentName?.toString() ?? '');
+  /** When conversation is assigned to a channel but no agent yet – show e.g. "Sales team" + "Connecting..." */
+  const [headerChannelName, setHeaderChannelName] = useState<string | null>(null);
 
-  // Notify parent of initial agent name
+  // Sync header state to parent (for universal Header in App)
   useEffect(() => {
-    if (onAgentNameChange && headerAgentName) {
+    if (onHeaderStateChange) {
+      onHeaderStateChange({
+        agentName: headerAgentName ?? initialAgentName ?? '',
+        channelName: headerChannelName,
+        conversationStatus,
+      });
+    }
+    if (onAgentNameChange && headerAgentName && !headerChannelName) {
       onAgentNameChange(headerAgentName);
     }
-  }, []); // Only on mount
+  }, [headerAgentName, headerChannelName, conversationStatus, initialAgentName, onHeaderStateChange, onAgentNameChange]);
 
   // Message polling fallback mechanism
   const [lastMessageTimestamp, setLastMessageTimestamp] = useState<Date | null>(null);
@@ -140,10 +169,12 @@ const ChatInbox = ({
     hasFetchedSessionRef.current = null;
     localStorage.removeItem(localStorageKey);
     setChatState(getInitialState());
+    setHeaderAgentName(initialAgentName ?? '');
+    setHeaderChannelName(null);
     setInput('');
     setErrors({});
     setWorkflowConfig({ workflowActive: false, workflowTrigger: null, firstStep: null });
-  }, [localStorageKey, setChatState]);
+  }, [localStorageKey, setChatState, initialAgentName]);
 
   // Expose resetChat to parent
   useEffect(() => {
@@ -621,6 +652,7 @@ const ChatInbox = ({
         metadata: Array.isArray(workflowOptionsFromPayload) && workflowOptionsFromPayload.length > 0
           ? { workflowOptions: workflowOptionsFromPayload }
           : undefined,
+        senderLabel: (payload.sender === 'agent' || payload.sender === 'ai') ? (payload.agentName || 'AI') : (payload.sender === 'system' && payload.agentName ? payload.agentName : undefined),
       };
 
       // Update last message timestamp
@@ -653,28 +685,36 @@ const ChatInbox = ({
         }
 
         const messagesWithoutLoader = prev.messages.filter((m: any) => m.type !== 'loader');
+        // Production: subtle sound for new incoming (bot/agent/system) messages
+        if (!isFromCustomer) playNewMessageSound();
         return { ...prev, messages: [...messagesWithoutLoader, newMessage] };
       });
     };
 
-    const handleConversationUpdate = (payload: { status: 'live' | 'closed' | 'ticket'; agentName?: string }) => {
-      if(payload.status === 'live' && payload.agentName) {
+    const handleConversationUpdate = (payload: { status: 'live' | 'closed' | 'ticket'; agentName?: string; channelName?: string }) => {
+      if (payload.status === 'live' && payload.agentName) {
         toast.success(`You are now connected with ${payload.agentName}`);
-      }
-      
-      const newAgentName = payload.agentName || initialAgentName;
-      setHeaderAgentName(newAgentName);
-      // Notify parent of agent name change
-      if (onAgentNameChange) {
-        onAgentNameChange(newAgentName);
+        setHeaderAgentName(payload.agentName);
+        setHeaderChannelName(null);
+        if (onAgentNameChange) onAgentNameChange(payload.agentName);
+        if (onHeaderStateChange) onHeaderStateChange({ agentName: payload.agentName, channelName: null, conversationStatus: payload.status });
+      } else if (payload.status === 'live' && payload.channelName && !payload.agentName) {
+        setHeaderChannelName(payload.channelName);
+        setHeaderAgentName(initialAgentName ?? '');
+        if (onHeaderStateChange) onHeaderStateChange({ agentName: initialAgentName ?? '', channelName: payload.channelName, conversationStatus: payload.status });
+      } else {
+        const newAgentName = payload.agentName || initialAgentName;
+        setHeaderAgentName(newAgentName ?? '');
+        setHeaderChannelName(null);
+        if (onAgentNameChange && payload.agentName) onAgentNameChange(payload.agentName);
+        if (onHeaderStateChange) onHeaderStateChange({ agentName: newAgentName ?? '', channelName: null, conversationStatus: payload.status });
       }
 
       setChatState(prev => ({
         ...prev,
-        // This correctly removes any lingering AI loader when a human takes over
         messages: prev.messages.filter(m => m.type !== 'loader'),
         conversationStatus: payload.status,
-        currentAgentName: payload.agentName || prev.currentAgentName,
+        currentAgentName: payload.agentName ?? prev.currentAgentName,
       }));
     };
     
@@ -854,6 +894,8 @@ const ChatInbox = ({
         <div className="flex-shrink-0">
           <Header 
             agentName={headerAgentName} 
+            channelName={headerChannelName}
+            conversationStatus={conversationStatus}
             setOpen={setOpen} 
             onReset={resetChat}
             socketConnected={socketConnected}

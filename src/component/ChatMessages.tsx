@@ -16,11 +16,14 @@ export interface Message {
   _id?: string;
   /** Workflow ask_question options – show as quick-reply buttons (value sent on click) */
   metadata?: { workflowOptions?: { value: string; label: string }[] };
+  /** Display name for bot/agent messages: human agent name or "AI" */
+  senderLabel?: string;
 }
 
 interface ChatMessagesProps {
   messages: Message[];
   isAgentTyping: boolean;
+  /** Display name in header and for bot messages (AI or human agent name) */
   agentName?: string;
   businessLogo?: string | null;
   widgetColor?: string;
@@ -149,6 +152,16 @@ const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widget
                             <div className="px-4 py-3 text-sm break-words rounded-2xl rounded-bl-md chat-bubble-bot bg-white text-gray-800 border border-gray-100/80">
                                 <FormattedText text={msg.text} className="text-gray-800 leading-relaxed" />
                             </div>
+                            {(msg.timestamp || (msg as Message).senderLabel) && (
+                              <div className="flex items-center gap-1.5 mt-1.5 px-1">
+                                {(msg as Message).senderLabel && (
+                                  <span className="text-[11px] font-medium text-gray-400">{(msg as Message).senderLabel}</span>
+                                )}
+                                {msg.timestamp && (
+                                  <span className="text-[11px] text-gray-400">{formatTime(msg.timestamp)}</span>
+                                )}
+                              </div>
+                            )}
                             {Array.isArray(workflowOptions) && workflowOptions.length > 0 && onWorkflowOptionSelect && (
                                 <div className="flex flex-wrap gap-2.5">
                                     {workflowOptions.map((opt, idx) => (
@@ -310,8 +323,8 @@ const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widget
                               msg.sender === 'user' ? 'justify-end' : 'justify-start'
                             )}>
                               {msg.sender === 'bot' && (
-                                <span className="text-[11px] font-medium text-gray-400">
-                                  {agentName || 'AI'}
+                                <span className="text-[11px] font-medium text-gray-400" title={(msg as Message).senderLabel || agentName || 'AI'}>
+                                  {(msg as Message).senderLabel ?? agentName ?? 'AI'}
                                 </span>
                               )}
                               <span className={cn(
@@ -341,8 +354,13 @@ const ChatMessages = ({ messages, isAgentTyping, agentName, businessLogo, widget
       })}
 
       {isAgentTyping && (
-        <div className="flex justify-start mb-4">
+        <div className="flex items-center gap-2 justify-start mb-4">
           <TypingLoader widgetColor={widgetColor} />
+          {agentName && (
+            <span className="text-xs text-gray-500 font-medium">
+              {agentName} is typing...
+            </span>
+          )}
         </div>
       )}
 

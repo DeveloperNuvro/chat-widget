@@ -1,6 +1,6 @@
 // App.tsx - Widget with 3 Tabs: Welcome, Chat/Inbox, Help/FAQ
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import ChatInbox from './component/ChatInbox';
 import Header from './component/Header';
@@ -32,6 +32,8 @@ const App: React.FC = () => {
   const [welcomeMessage, setWelcomeMessage] = useState<string>('');
   const [socketConnected, setSocketConnected] = useState(false);
   const [headerAgentName, setHeaderAgentName] = useState<string>('');
+  const [headerChannelName, setHeaderChannelName] = useState<string | null>(null);
+  const [headerConversationStatus, setHeaderConversationStatus] = useState<'ai_only' | 'live' | 'ticket' | 'closed'>('ai_only');
   const [businessLogo, setBusinessLogo] = useState<string | null>(null);
   const [widgetColor, setWidgetColor] = useState<string>('#ff21b0'); // Default pink color
   const resetChatRef = useRef<(() => void) | null>(null);
@@ -44,9 +46,15 @@ const App: React.FC = () => {
   /** agentId from URL (optional) or from widget config – used so this agent's workflow runs on new chat */
   const [agentId, setAgentId] = useState<string | null>(() => params.get('agentId') || null);
 
-  // Initialize header agent name
+  // Initialize header agent name from URL
   useEffect(() => {
     setHeaderAgentName(agentName);
+  }, [agentName]);
+
+  const handleHeaderStateChange = useCallback((state: { agentName: string; channelName: string | null; conversationStatus: 'ai_only' | 'live' | 'ticket' | 'closed' }) => {
+    setHeaderAgentName(state.agentName || agentName);
+    setHeaderChannelName(state.channelName);
+    setHeaderConversationStatus(state.conversationStatus);
   }, [agentName]);
 
   useEffect(() => {
@@ -175,6 +183,8 @@ const App: React.FC = () => {
       <div className="flex-shrink-0 z-50 bg-white border-b border-gray-100/80" style={{ position: 'sticky', top: 0 }}>
         <Header 
           agentName={headerAgentName || agentName} 
+          channelName={headerChannelName}
+          conversationStatus={headerConversationStatus}
           setOpen={setOpen} 
           onReset={handleResetChat}
           socketConnected={socketConnected}
@@ -313,6 +323,7 @@ const App: React.FC = () => {
             hideHeader={true}
             onSocketStatusChange={setSocketConnected}
             onAgentNameChange={setHeaderAgentName}
+            onHeaderStateChange={handleHeaderStateChange}
             onResetChatReady={(resetFn) => { resetChatRef.current = resetFn; }}
             businessLogo={businessLogo}
             widgetColor={widgetColor}

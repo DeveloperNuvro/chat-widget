@@ -6,6 +6,9 @@ import { getColorVariations } from '../utils/colorUtils';
 
 interface HeaderProps {
   agentName: string;
+  /** When live but no agent assigned yet – show e.g. "Sales team" and "Connecting..." */
+  channelName?: string | null;
+  conversationStatus?: 'ai_only' | 'live' | 'ticket' | 'closed';
   setOpen: (isOpen: boolean) => void;
   onReset: () => void;
   socketConnected?: boolean;
@@ -15,6 +18,8 @@ interface HeaderProps {
 
 const Header = ({ 
   agentName, 
+  channelName = null,
+  conversationStatus = 'ai_only',
   setOpen, 
   onReset,
   socketConnected = false,
@@ -30,6 +35,21 @@ const Header = ({
   // Show online if socket is connected, regardless of browser online status
   const connectionStatus = socketConnected ? 'online' : 'offline';
   const colors = getColorVariations(widgetColor);
+
+  // When channelName is set we're in queue (no agent yet) – show "[Channel] team"
+  const waitingForAgent = conversationStatus === 'live' && !!channelName && !agentName;
+  const headerTitle = waitingForAgent
+    ? `${channelName} team`
+    : (agentName || t('header.defaultAgent') || 'Support');
+  // Subtitle: waiting queue → "An agent will be with you shortly."; live with agent → "Online now" or "Connected"; else socket status
+  const connectedToAgent = conversationStatus === 'live' && !channelName && !!agentName;
+  const headerSubtitle = waitingForAgent
+    ? (t('header.agentWillBeWithYouShortly') || 'An agent will be with you shortly.')
+    : connectedToAgent && connectionStatus !== 'online'
+      ? (t('header.connected') || 'Connected')
+      : connectionStatus === 'online'
+        ? (t('header.onlineNow') || 'Online now')
+        : (t('header.connecting') || 'Connecting...');
 
   return (
     <div 
@@ -74,15 +94,15 @@ const Header = ({
           )} title={connectionStatus === 'online' ? 'Online' : 'Connecting...'} aria-hidden />
         </div>
         <div className="flex flex-col min-w-0 flex-1">
-          <span className="text-white font-semibold text-sm sm:text-base truncate" title={agentName}>
-            {agentName}
+          <span className="text-white font-semibold text-sm sm:text-base truncate" title={headerTitle}>
+            {headerTitle}
           </span>
           <span className="text-white/85 text-xs font-medium flex items-center gap-1.5 mt-0.5">
             <span className={cn(
               "w-1.5 h-1.5 rounded-full flex-shrink-0",
-              connectionStatus === 'online' ? 'bg-emerald-300' : 'bg-white/50'
+              !waitingForAgent && connectionStatus === 'online' ? 'bg-emerald-300' : 'bg-white/50'
             )} />
-            {connectionStatus === 'online' ? 'Online now' : 'Connecting...'}
+            {headerSubtitle}
           </span>
         </div>
       </div>

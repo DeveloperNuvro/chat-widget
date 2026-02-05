@@ -36,6 +36,13 @@
   },
   "footer": {
     "poweredBy": "চালিত হয়েছে"
+  },
+  "header": {
+    "defaultAgent": "সাপোর্ট",
+    "onlineNow": "অনলাইনে আছেন",
+    "connecting": "সংযুক্ত হচ্ছে...",
+    "connected": "সংযুক্ত",
+    "agentWillBeWithYouShortly": "একজন এজেন্ট শীঘ্রই আপনার সাথে যোগাযোগ করবেন।"
   }
 }
 

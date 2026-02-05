@@ -36,5 +36,12 @@
   },
   "footer": {
     "poweredBy": "Powered by"
+  },
+  "header": {
+    "defaultAgent": "Support",
+    "onlineNow": "Online now",
+    "connecting": "Connecting...",
+    "connected": "Connected",
+    "agentWillBeWithYouShortly": "An agent will be with you shortly."
   }
 }
